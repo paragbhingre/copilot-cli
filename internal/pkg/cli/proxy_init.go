@@ -4,6 +4,7 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/ssm"
@@ -18,6 +19,7 @@ import (
 	"github.com/spf13/cobra"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 )
 
@@ -49,13 +51,12 @@ type initProxyOpts struct {
 	//dockerEngine configSelector
 	sel configSelector
 
-	errChannel chan
+	errChannel chan error
 
 	// Outputs stored on successful actions.
 	sshPid          string
 	securityGroupId string //
 	publicIpAddress string // The task's public IP
-
 
 	// Init a Dockerfile parser using fs and input path
 	dockerfile func(string) dockerfileParser
@@ -125,10 +126,12 @@ func (o *initProxyOpts) askEnvName() error {
 
 // Execute writes the service's manifest file and stores the service in SSM.
 func (o *initProxyOpts) Execute() error {
+	var securityGroupId string
+	// TODO: Deploy security group stack
+	_, err := o.startTask(securityGroupId)
 
-
+	// TODO: exec ssh -D 9000 -qCN -f root@${publicIP} and define cleanup
 	done, errCh := o.waitForCleanup()
-	var err error
 	for {
 		select {
 		case <-done:
@@ -137,6 +140,51 @@ func (o *initProxyOpts) Execute() error {
 			return err
 		}
 	}
+}
+func (o *initProxyOpts) writeFiles() string {
+	// TODO: write files
+	return ""
+}
+
+func (o *initProxyOpts) deleteFiles() {
+	// TODO: delete files
+}
+
+func (o *initProxyOpts) startSSHProxy() error {
+	return nil
+}
+
+func (o *initProxyOpts) startTask(securityGroupId string) (string, error) {
+	dockerFilePath := o.writeFiles()
+	defer o.deleteFiles()
+
+	// configure runner
+	taskRunner, err := newTaskRunOpts(runTaskVars{
+		count:                 1,
+		cpu:                   256,
+		memory:                512,
+		dockerfilePath:        dockerFilePath,
+		dockerfileContextPath: filepath.Dir(dockerFilePath),
+		securityGroups:        []string{securityGroupId},
+		env:                   o.envName,
+		appName:               o.appName,
+	})
+	if err != nil {
+		return "", err
+	}
+	err = taskRunner.Execute()
+	if err != nil {
+		return "", err
+	}
+	if len(taskRunner.publicIPs) != 1 {
+		return "", errors.New("expected exactly 1 public IP")
+	}
+	var publicIP string
+	for _, ip := range taskRunner.publicIPs {
+		publicIP = ip
+		break
+	}
+	return publicIP, nil
 }
 
 func (o *initProxyOpts) waitForCleanup() (chan bool, chan error) {
