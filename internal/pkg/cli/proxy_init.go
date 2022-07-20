@@ -4,25 +4,23 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/ssm"
 	"github.com/aws/copilot-cli/internal/pkg/aws/identity"
-	"github.com/aws/copilot-cli/internal/pkg/term/color"
-
 	"github.com/aws/copilot-cli/internal/pkg/aws/sessions"
 	"github.com/aws/copilot-cli/internal/pkg/config"
-	"github.com/aws/copilot-cli/internal/pkg/deploy"
-	"github.com/aws/copilot-cli/internal/pkg/deploy/cloudformation"
-	"github.com/aws/copilot-cli/internal/pkg/initialize"
-	"github.com/aws/copilot-cli/internal/pkg/manifest"
+	"github.com/aws/copilot-cli/internal/pkg/term/color"
 	"github.com/aws/copilot-cli/internal/pkg/term/log"
-	termprogress "github.com/aws/copilot-cli/internal/pkg/term/progress"
 	"github.com/aws/copilot-cli/internal/pkg/term/prompt"
 	"github.com/aws/copilot-cli/internal/pkg/term/selector"
-	"github.com/aws/copilot-cli/internal/pkg/workspace"
 	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
+	"os"
+	"os/signal"
+	"path/filepath"
+	"syscall"
 )
 
 const ()
@@ -47,81 +45,49 @@ type initProxyOpts struct {
 
 	// Interfaces to interact with dependencies.
 	fs     afero.Fs
-	init   svcInitializer
 	prompt prompter
 	store  store
+
 	//dockerEngine configSelector
-	sel       configSelector
-	topicSel  topicSelector
-	mftReader manifestReader
+	sel configSelector
+
+	errChannel chan error
 
 	// Outputs stored on successful actions.
-	manifestPath string
-	platform     *manifest.PlatformString
-	topics       []manifest.TopicSubscription
-
-	// For workspace validation.
-	wsAppName         string
-	wsPendingCreation bool
-
-	// Cache variables
-	df             dockerfileParser
-	manifestExists bool
+	sshPid          string
+	securityGroupId string //
+	publicIpAddress string // The task's public IP
 
 	// Init a Dockerfile parser using fs and input path
 	dockerfile func(string) dockerfileParser
 }
 
 func newInitProxyOpts(vars initProxyVars) (*initProxyOpts, error) {
-	ws, err := workspace.New()
-	if err != nil {
-		return nil, fmt.Errorf("workspace cannot be created: %w", err)
-	}
-
-	sessProvider := sessions.ImmutableProvider(sessions.UserAgentExtras("svc init"))
+	sessProvider := sessions.ImmutableProvider(sessions.UserAgentExtras("proxy"))
 	sess, err := sessProvider.Default()
 	if err != nil {
 		return nil, err
 	}
 	store := config.NewSSMStore(identity.New(sess), ssm.New(sess), aws.StringValue(sess.Config.Region))
 	prompter := prompt.New()
-	deployStore, err := deploy.NewStore(sessProvider, store)
-	if err != nil {
-		return nil, err
-	}
-	snsSel := selector.NewDeploySelect(prompter, store, deployStore)
 
-	initSvc := &initialize.WorkloadInitializer{
-		Store:    store,
-		Ws:       ws,
-		Prog:     termprogress.NewSpinner(log.DiagnosticWriter),
-		Deployer: cloudformation.New(sess),
-	}
 	opts := &initProxyOpts{
 		initProxyVars: vars,
 		store:         store,
 		fs:            &afero.Afero{Fs: afero.NewOsFs()},
-		init:          initSvc,
 		prompt:        prompter,
 		sel:           selector.NewConfigSelector(prompter, store),
-		topicSel:      snsSel,
-		mftReader:     ws,
-		wsAppName:     tryReadingAppName(),
 	}
 	return opts, nil
 }
 
 // Validate returns an error for any invalid optional flags.
 func (o *initProxyOpts) Validate() error {
-	// If this app is pending creation, we'll skip validation.
 	return nil
 }
 
 // Ask prompts for and validates any required flags.
 func (o *initProxyOpts) Ask() error {
-	// NOTE: we optimize the case where `name` is given as a flag while `wkldType` is not.
-	// In this case, we can try reading the manifest, and set `wkldType` to the value found in the manifest
-	// without having to validate it. We can then short circuit the rest of the prompts for an optimal UX.
 	if err := o.askAppName(); err != nil {
 		return err
 	}
@@ -160,9 +126,84 @@ func (o *initProxyOpts) askEnvName() error {
 
 // Execute writes the service's manifest file and stores the service in SSM.
 func (o *initProxyOpts) Execute() error {
-	// Check for a valid healthcheck and add it to the opts.
+	var securityGroupId string
+	// TODO: Deploy security group stack
+	_, err := o.startTask(securityGroupId)
 
+	// TODO: exec ssh -D 9000 -qCN -f root@${publicIP} and define cleanup
+	done, errCh := o.waitForCleanup()
+	for {
+		select {
+		case <-done:
+			return nil
+		case err = <-errCh:
+			return err
+		}
+	}
+}
+func (o *initProxyOpts) writeFiles() string {
+	// TODO: write files
+	return ""
+}
+
+func (o *initProxyOpts) deleteFiles() {
+	// TODO: delete files
+}
+
+func (o *initProxyOpts) startSSHProxy() error {
 	return nil
+}
+
+func (o *initProxyOpts) startTask(securityGroupId string) (string, error) {
+	dockerFilePath := o.writeFiles()
+	defer o.deleteFiles()
+
+	// configure runner
+	taskRunner, err := newTaskRunOpts(runTaskVars{
+		count:                 1,
+		cpu:                   256,
+		memory:                512,
+		dockerfilePath:        dockerFilePath,
+		dockerfileContextPath: filepath.Dir(dockerFilePath),
+		securityGroups:        []string{securityGroupId},
+		env:                   o.envName,
+		appName:               o.appName,
+	})
+	if err != nil {
+		return "", err
+	}
+	err = taskRunner.Execute()
+	if err != nil {
+		return "", err
+	}
+	if len(taskRunner.publicIPs) != 1 {
+		return "", errors.New("expected exactly 1 public IP")
+	}
+	var publicIP string
+	for _, ip := range taskRunner.publicIPs {
+		publicIP = ip
+		break
+	}
+	return publicIP, nil
+}
+
+func (o *initProxyOpts) waitForCleanup() (chan bool, chan error) {
+	errCh := make(chan error)
+	done := make(chan bool)
+	c := make(chan os.Signal, 2)
+	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
+	go func() {
+		<-c
+		var err error
+		// Kill SSH tunnel
+		// Stop task
+		// Destroy CF stack
+		if err != nil {
+			errCh <- err
+		}
+		done <- true
+	}()
+	return done, errCh
 }
 
 // BuildProxyInitCmd build the command for creating a new proxy.
