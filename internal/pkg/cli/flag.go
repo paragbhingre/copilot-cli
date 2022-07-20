@@ -195,7 +195,6 @@ Supported providers are: %s.`, strings.Join(manifest.PipelineProviders, ", "))
 )
 
 const (
-	appFlagDescription            = "Name of the application."
 	envFlagDescription            = "Name of the environment."
 	svcFlagDescription            = "Name of the service."
 	jobFlagDescription            = "Name of the job."
@@ -212,7 +211,7 @@ const (
 rollback in case of deployment failure.
 We do not recommend using this flag for a
 production environment.`
-	manifestFlagDescription = "Optional. Output the manifest file used for the deployment."
+	manifestFlagDescription    = "Optional. Output the manifest file used for the deployment."
 	svcManifestFlagDescription = `Optional. Name of the environment in which the service was deployed;
 output the manifest file used for that deployment.`
 
@@ -244,6 +243,7 @@ Defaults to all logs. Only one of end-time / follow may be used.`
 	pipelineEnvsFlagDescription      = "Environments to add to the pipeline."
 	pipelineTypeFlagDescription      = `The type of pipeline. Must be either "Workloads" or "Environments".`
 	domainNameFlagDescription        = "Optional. Your existing custom domain name."
+	appFlagDescription               = "Optional. Your existing app name."
 	envResourcesFlagDescription      = "Optional. Show the resources in your environment."
 	svcResourcesFlagDescription      = "Optional. Show the resources in your service."
 	pipelineResourcesFlagDescription = "Optional. Show the resources in your pipeline."
