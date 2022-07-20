@@ -10,6 +10,8 @@ import (
 	"github.com/aws/copilot-cli/internal/pkg/template"
 )
 
+const proxyStackName = "Proxy"
+
 type ProxyReadParser interface {
 	template.ReadParser
 	ParseProxy(data *template.ProxyOpts) (*template.Content, error)
@@ -52,7 +54,7 @@ func (e *ProxyStackConfig) Template() (string, error) {
 
 // StackName returns the name of the CloudFormation stack for the proxy.
 func (t *ProxyStackConfig) StackName() string {
-	return "Proxy"
+	return proxyStackName
 }
 
 func (s *ProxyStackConfig) SerializedParameters() (string, error) {

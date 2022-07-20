@@ -322,6 +322,11 @@ type wsAddonManager interface {
 	wlLister
 }
 
+type wsBastionWriter interface {
+	WriteBastionFile(name string, envName string, content []byte) (string, error)
+	DeleteFolder(elems ...string) error
+}
+
 type bucketEmptier interface {
 	EmptyBucket(bucket string) error
 }
@@ -381,6 +386,7 @@ type taskDeployer interface {
 
 type proxyDeployer interface {
 	DeployProxy(out termprogress.FileWriter, input *deploy.CreateProxyResourcesInput, opts ...awscloudformation.StackOption) error
+	DeleteProxy() error
 }
 
 type taskStackManager interface {
