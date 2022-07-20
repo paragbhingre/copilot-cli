@@ -12,6 +12,8 @@ import (
 	"github.com/aws/copilot-cli/internal/pkg/deploy/cloudformation/stack"
 )
 
+const proxyStackName = "Proxy"
+
 // DeployTask deploys proxy stack
 func (cf CloudFormation) DeployProxy(out progress.FileWriter, input *deploy.CreateProxyResourcesInput, opts ...cloudformation.StackOption) error {
 	conf := stack.NewProxyStackConfig(input)
@@ -30,4 +32,8 @@ func (cf CloudFormation) DeployProxy(out progress.FileWriter, input *deploy.Crea
 		}
 	}
 	return nil
+}
+
+func (cf CloudFormation) DeleteProxy() error {
+	return cf.cfnClient.DeleteAndWait(proxyStackName)
 }

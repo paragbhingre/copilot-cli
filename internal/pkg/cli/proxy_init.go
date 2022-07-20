@@ -4,6 +4,11 @@
 package cli
 
 import (
+	"bytes"
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/x509"
+	"encoding/pem"
 	"errors"
 	"fmt"
 	"github.com/aws/aws-sdk-go/aws"
@@ -11,22 +16,23 @@ import (
 	"github.com/aws/aws-sdk-go/service/ssm"
 	awscloudformation "github.com/aws/copilot-cli/internal/pkg/aws/cloudformation"
 	"github.com/aws/copilot-cli/internal/pkg/aws/identity"
-	"github.com/aws/copilot-cli/internal/pkg/term/color"
-	"os"
-	"os/signal"
-	"path/filepath"
-	"syscall"
-
 	"github.com/aws/copilot-cli/internal/pkg/aws/sessions"
 	"github.com/aws/copilot-cli/internal/pkg/config"
 	"github.com/aws/copilot-cli/internal/pkg/deploy"
 	"github.com/aws/copilot-cli/internal/pkg/deploy/cloudformation"
-	"github.com/aws/copilot-cli/internal/pkg/manifest"
+	"github.com/aws/copilot-cli/internal/pkg/describe/stack"
+	"github.com/aws/copilot-cli/internal/pkg/term/color"
 	"github.com/aws/copilot-cli/internal/pkg/term/log"
 	"github.com/aws/copilot-cli/internal/pkg/term/prompt"
 	"github.com/aws/copilot-cli/internal/pkg/term/selector"
+	"github.com/aws/copilot-cli/internal/pkg/workspace"
 	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
+	"golang.org/x/crypto/ssh"
+	"os"
+	"os/signal"
+	"path/filepath"
+	"syscall"
 )
 
 const ()
@@ -56,13 +62,10 @@ type initProxyOpts struct {
 	provider sessionProvider
 	sess     *session.Session
 	deployer proxyDeployer
+	ws       wsBastionWriter
 	//dockerEngine configSelector
-	sel configSelector
-
-	// Outputs stored on successful actions.
-	manifestPath string
-	platform     *manifest.PlatformString
-	topics       []manifest.TopicSubscription
+	sel  configSelector
+	desc stack.StackDescriber
 
 	errChannel chan error
 
@@ -88,10 +91,11 @@ func newInitProxyOpts(vars initProxyVars) (*initProxyOpts, error) {
 	}
 	store := config.NewSSMStore(identity.New(sess), ssm.New(sess), aws.StringValue(sess.Config.Region))
 	prompter := prompt.New()
-	//deployStore, err := deploy.NewStore(sessProvider, store)
+	ws, err := workspace.New()
 	if err != nil {
 		return nil, err
 	}
+
 	deployer := cloudformation.New(sess)
 	opts := &initProxyOpts{
 		initProxyVars: vars,
@@ -99,6 +103,7 @@ func newInitProxyOpts(vars initProxyVars) (*initProxyOpts, error) {
 		fs:            &afero.Afero{Fs: afero.NewOsFs()},
 		prompt:        prompter,
 		deployer:      deployer,
+		ws:            ws,
 		sel:           selector.NewConfigSelector(prompter, store),
 	}
 	return opts, nil
@@ -149,27 +154,32 @@ func (o *initProxyOpts) askEnvName() error {
 
 // Execute writes the service's manifest file and stores the service in SSM.
 func (o *initProxyOpts) Execute() error {
+	done, errCh := o.waitForCleanup()
 
 	if err := o.configureSessForProxy(); err != nil {
-		return err
+		errCh <- err
 	}
 
 	if err := o.deployProxyResources(); err != nil {
-		return err
+		errCh <- err
 	}
 
-	var securityGroupId string
-	// TODO: Deploy security group stack
-	_, err := o.startTask(securityGroupId)
+	_, err := o.startTask(o.securityGroupId)
+	if err != nil {
+		errCh <- err
+	}
 
 	// TODO: exec ssh -D 9000 -qCN -f root@${publicIP} and define cleanup
-	done, errCh := o.waitForCleanup()
+
 	for {
 		select {
 		case <-done:
-			return nil
-		case err = <-errCh:
-			return err
+			select {
+			case err = <-errCh:
+				return err
+			default:
+				return nil
+			}
 		}
 	}
 
@@ -207,21 +217,90 @@ func (o *initProxyOpts) deploy() error {
 	return o.deployer.DeployProxy(os.Stderr, input, deployOpts...)
 }
 
-func (o *initProxyOpts) writeFiles() string {
-	// TODO: write files
-	return ""
+func (o *initProxyOpts) writeFiles() (dockerfilePath string, err error) {
+	log.Infoln("Writing temp files to disk...")
+	sshDockerfile := []byte(`FROM alpine:latest
+RUN apk add openssh
+RUN ssh-keygen -f /etc/ssh/ssh_host_rsa_key -N '' -t rsa
+RUN echo "root:$(head /dev/urandom | tr -dc A-Za-z0-9 | head -c 36 ; echo '')" | chpasswd
+
+COPY authorized_keys /root/.ssh/authorized_keys
+
+COPY sshd_config /etc/ssh/sshd_config
+
+RUN chmod 0700 ~/.ssh \
+    && chmod 0600 ~/.ssh/authorized_keys
+
+EXPOSE 22
+
+CMD ["/usr/sbin/sshd", "-D"]
+`)
+
+	dockerfilePath, err = o.ws.WriteBastionFile("bastion.Dockerfile", o.envName, sshDockerfile)
+	if err != nil {
+		return "", err
+	}
+
+	sshdConfig := []byte(`PasswordAuthentication no
+PermitEmptyPasswords no
+
+Match User root
+  AllowTcpForwarding yes
+  X11Forwarding no
+  AllowAgentForwarding no
+  ForceCommand /bin/false
+`)
+	_, err = o.ws.WriteBastionFile("sshd_config", o.envName, sshdConfig)
+	if err != nil {
+		return "", err
+	}
+	log.Infoln("Generating a new rsa keypair...")
+	pubKey, privKey, err := generateKeyPair()
+	if err != nil {
+		return "", err
+	}
+
+	o.ws.WriteBastionFile("id_rsa", o.envName, privKey)
+	o.ws.WriteBastionFile("authorized_keys", o.envName, pubKey)
+
+	return dockerfilePath, nil
 }
 
 func (o *initProxyOpts) deleteFiles() {
-	// TODO: delete files
+	o.ws.DeleteFolder("environments", o.envName, "bastion")
 }
 
 func (o *initProxyOpts) startSSHProxy() error {
+	// TODO
 	return nil
 }
 
+func generateKeyPair() ([]byte, []byte, error) {
+	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		return nil, nil, err
+	}
+	var privKeyBuffer bytes.Buffer
+
+	privateKeyPEM := &pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(privateKey)}
+	if err := pem.Encode(&privKeyBuffer, privateKeyPEM); err != nil {
+		return nil, nil, err
+	}
+
+	// generate and write public key
+	pub, err := ssh.NewPublicKey(&privateKey.PublicKey)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	var pubKeyBuf bytes.Buffer
+	pubKeyBuf.Write(ssh.MarshalAuthorizedKey(pub))
+
+	return pubKeyBuf.Bytes(), privKeyBuffer.Bytes(), nil
+}
+
 func (o *initProxyOpts) startTask(securityGroupId string) (string, error) {
-	dockerFilePath := o.writeFiles()
+	dockerFilePath, err := o.writeFiles()
 	defer o.deleteFiles()
 
 	// configure runner
@@ -260,16 +339,37 @@ func (o *initProxyOpts) waitForCleanup() (chan bool, chan error) {
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
 	go func() {
 		<-c
-		var err error
-		// Kill SSH tunnel
-		// Stop task
-		// Destroy CF stack
-		if err != nil {
-			errCh <- err
-		}
+		log.Infoln("received sigterm")
+		o.bestEffortCleanup()
+		done <- true
+	}()
+	go func() {
+		err := <-errCh
+		log.Errorf("Error setting up proxy: %w", err)
+		o.bestEffortCleanup()
+		errCh <- err
 		done <- true
 	}()
 	return done, errCh
+}
+
+func (o *initProxyOpts) bestEffortCleanup() {
+	o.stopSSH()
+	o.stopTask()
+	o.deleteStack()
+}
+
+func (o *initProxyOpts) stopSSH() {
+	//TODO
+}
+
+func (o *initProxyOpts) stopTask() {
+	//TODO
+}
+
+func (o *initProxyOpts) deleteStack() {
+	//TODO
+	o.deployer.D
 }
 
 // BuildProxyInitCmd build the command for creating a new proxy.

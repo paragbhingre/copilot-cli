@@ -46,6 +46,7 @@ const (
 	addonsDirName             = "addons"
 	pipelinesDirName          = "pipelines"
 	environmentsDirName       = "environments"
+	bastionDirName            = "bastion"
 	maximumParentDirsToSearch = 5
 	legacyPipelineFileName    = "pipeline.yml"
 	manifestFileName          = "manifest.yml"
@@ -522,6 +523,20 @@ func (ws *Workspace) Rel(fullPath string) (string, error) {
 		return "", fmt.Errorf("get path to Copilot dir: %w", err)
 	}
 	return filepath.Rel(filepath.Dir(copiDir), fullPath)
+}
+
+func (ws *Workspace) WriteBastionFile(name string, envName string, content []byte) (string, error) {
+	return ws.write(content, environmentsDirName, envName, bastionDirName, name)
+}
+
+func (ws *Workspace) DeleteFolder(elems ...string) error {
+	copilotPath, err := ws.copilotDirPath()
+	if err != nil {
+		return err
+	}
+	pathElems := append([]string{copilotPath}, elems...)
+	filename := filepath.Join(pathElems...)
+	return ws.fs.RemoveAll(filename)
 }
 
 func (ws *Workspace) copilotDirPath() (string, error) {
