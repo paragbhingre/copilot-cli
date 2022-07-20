@@ -167,6 +167,7 @@ type runTaskOpts struct {
 	// Cached variables to hold SSM Param and Secrets Manager Secrets
 	ssmParamSecrets       map[string]string
 	secretsManagerSecrets map[string]string
+	publicIPs             map[string]string
 }
 
 func newTaskRunOpts(vars runTaskVars) (*runTaskOpts, error) {
@@ -869,7 +870,8 @@ func (o *runTaskOpts) showPublicIPs(tasks []*task.Task) {
 		}
 		log.Infof("- %s (for %s)\n", ip, taskARN)
 	}
-
+	// cache for proxy
+	o.publicIPs = publicIPs
 }
 
 func (o *runTaskOpts) buildAndPushImage() error {
