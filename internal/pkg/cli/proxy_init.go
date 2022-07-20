@@ -365,11 +365,11 @@ func (o *initProxyOpts) stopSSH() {
 
 func (o *initProxyOpts) stopTask() {
 	//TODO
+	o.tas
 }
 
 func (o *initProxyOpts) deleteStack() {
-	//TODO
-	o.deployer.D
+	o.deployer.DeleteProxy()
 }
 
 // BuildProxyInitCmd build the command for creating a new proxy.
