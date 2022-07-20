@@ -1,0 +1,27 @@
+Parameters:
+  App:
+    Type: String
+    Description: Your application's name.
+  Env:
+    Type: String
+    Description: The environment name your service, job, or workflow is being deployed to.
+
+Resources:
+  SSHSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: A security group to allow SSH access to a running fargate task.
+      GroupName: !Sub '${App}-${Env}-SshSecurityGroup'
+      VpcId:
+        Fn::ImportValue:
+          !Sub '${App}-${Env}-VpcId'
+      SecurityGroupIngress:
+        - CidrIp: 0.0.0.0/0
+          FromPort: 22
+          ToPort: 22
+          IpProtocol: tcp
+Outputs:
+  SSHSecurityGroup:
+    Value: !Ref SSHSecurityGroup
+    Export:
+      Name: !Sub ${AWS::StackName}-SSHSecurityGroup

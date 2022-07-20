@@ -379,6 +379,10 @@ type taskDeployer interface {
 	DeployTask(out termprogress.FileWriter, input *deploy.CreateTaskResourcesInput, opts ...awscloudformation.StackOption) error
 }
 
+type proxyDeployer interface {
+	DeployProxy(out termprogress.FileWriter, input *deploy.CreateProxyResourcesInput, opts ...awscloudformation.StackOption) error
+}
+
 type taskStackManager interface {
 	DeleteTask(task deploy.TaskStackInfo) error
 	GetTaskStack(taskName string) (*deploy.TaskStackInfo, error)

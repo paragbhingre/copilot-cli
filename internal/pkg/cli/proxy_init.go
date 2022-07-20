@@ -6,9 +6,12 @@ package cli
 import (
 	"fmt"
 	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/ssm"
+	awscloudformation "github.com/aws/copilot-cli/internal/pkg/aws/cloudformation"
 	"github.com/aws/copilot-cli/internal/pkg/aws/identity"
 	"github.com/aws/copilot-cli/internal/pkg/term/color"
+	"os"
 
 	"github.com/aws/copilot-cli/internal/pkg/aws/sessions"
 	"github.com/aws/copilot-cli/internal/pkg/config"
@@ -46,10 +49,13 @@ type initProxyOpts struct {
 	initProxyVars
 
 	// Interfaces to interact with dependencies.
-	fs     afero.Fs
-	init   svcInitializer
-	prompt prompter
-	store  store
+	fs       afero.Fs
+	init     svcInitializer
+	prompt   prompter
+	store    store
+	provider sessionProvider
+	sess     *session.Session
+	deployer proxyDeployer
 	//dockerEngine configSelector
 	sel       configSelector
 	topicSel  topicSelector
@@ -72,6 +78,11 @@ type initProxyOpts struct {
 	dockerfile func(string) dockerfileParser
 }
 
+type CreateProxyResourcesInput struct {
+	AppName string
+	EnvName string
+}
+
 func newInitProxyOpts(vars initProxyVars) (*initProxyOpts, error) {
 	ws, err := workspace.New()
 	if err != nil {
@@ -90,7 +101,7 @@ func newInitProxyOpts(vars initProxyVars) (*initProxyOpts, error) {
 		return nil, err
 	}
 	snsSel := selector.NewDeploySelect(prompter, store, deployStore)
-
+	deployer := cloudformation.New(sess)
 	initSvc := &initialize.WorkloadInitializer{
 		Store:    store,
 		Ws:       ws,
@@ -103,6 +114,7 @@ func newInitProxyOpts(vars initProxyVars) (*initProxyOpts, error) {
 		fs:            &afero.Afero{Fs: afero.NewOsFs()},
 		init:          initSvc,
 		prompt:        prompter,
+		deployer:      deployer,
 		sel:           selector.NewConfigSelector(prompter, store),
 		topicSel:      snsSel,
 		mftReader:     ws,
@@ -160,16 +172,54 @@ func (o *initProxyOpts) askEnvName() error {
 
 // Execute writes the service's manifest file and stores the service in SSM.
 func (o *initProxyOpts) Execute() error {
-	// Check for a valid healthcheck and add it to the opts.
+
+	if err := o.configureSessForProxy(); err != nil {
+		return err
+	}
+
+	if err := o.deployProxyResources(); err != nil {
+		return err
+	}
 
 	return nil
+}
+
+func (o *initProxyOpts) configureSessForProxy() error {
+	var sess *session.Session
+	var err error
+	fmt.Println("inside configureSessForProxy")
+	sessProvider := sessions.ImmutableProvider(sessions.UserAgentExtras("proxy init"))
+	sess, err = sessProvider.Default()
+	fmt.Println("inside configureSessForProxy1")
+	if err != nil {
+		return fmt.Errorf("get default session: %w", err)
+	}
+	o.sess = sess
+	return nil
+}
+
+func (o *initProxyOpts) deployProxyResources() error {
+	if err := o.deploy(); err != nil {
+		return fmt.Errorf("proxy resource: %w", err)
+	}
+	return nil
+}
+
+func (o *initProxyOpts) deploy() error {
+	var deployOpts []awscloudformation.StackOption
+
+	input := &deploy.CreateProxyResourcesInput{
+		AppName: o.appName,
+		EnvName: o.envName,
+	}
+	return o.deployer.DeployProxy(os.Stderr, input, deployOpts...)
 }
 
 // BuildProxyInitCmd build the command for creating a new proxy.
 func BuildProxyInitCmd() *cobra.Command {
 	vars := initProxyVars{}
 	cmd := &cobra.Command{
-		Use:     "init",
+		Use:     "proxy",
 		Short:   "Creates a new proxy in an application.",
 		Long:    `Creates a new proxy in an application.`,
 		Example: `"`,
