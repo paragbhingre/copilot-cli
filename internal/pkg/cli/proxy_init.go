@@ -21,6 +21,7 @@ import (
 	"github.com/aws/copilot-cli/internal/pkg/deploy"
 	"github.com/aws/copilot-cli/internal/pkg/deploy/cloudformation"
 	"github.com/aws/copilot-cli/internal/pkg/describe/stack"
+	"github.com/aws/copilot-cli/internal/pkg/exec"
 	"github.com/aws/copilot-cli/internal/pkg/term/color"
 	"github.com/aws/copilot-cli/internal/pkg/term/log"
 	"github.com/aws/copilot-cli/internal/pkg/term/prompt"
@@ -40,6 +41,7 @@ const ()
 const (
 	proxyInitAppNameHelpPrompt = "Proxy will be initiated in the selected application."
 	proxyInitEnvNameHelpPrompt = "Proxy will be initiated in the selected environment."
+	defaultUserName            = "root"
 )
 
 var (
@@ -50,6 +52,10 @@ var (
 type initProxyVars struct {
 	appName string
 	envName string
+}
+
+type cmdRunner interface {
+	Run(name string, args []string, opts ...exec.CmdOption) error
 }
 
 type initProxyOpts struct {
@@ -64,8 +70,9 @@ type initProxyOpts struct {
 	deployer proxyDeployer
 	ws       wsBastionWriter
 	//dockerEngine configSelector
-	sel  configSelector
-	desc stack.StackDescriber
+	sel       configSelector
+	desc      stack.StackDescriber
+	cmdRunner cmdRunner
 
 	errChannel chan error
 
@@ -73,6 +80,8 @@ type initProxyOpts struct {
 	sshPid          string
 	securityGroupId string //
 	publicIpAddress string // The task's public IP
+	dockerfilePath  string
+	idRsaPath       string
 
 	// Init a Dockerfile parser using fs and input path
 	dockerfile func(string) dockerfileParser
@@ -95,7 +104,7 @@ func newInitProxyOpts(vars initProxyVars) (*initProxyOpts, error) {
 	if err != nil {
 		return nil, err
 	}
-
+	cmd := exec.NewCmd()
 	deployer := cloudformation.New(sess)
 	opts := &initProxyOpts{
 		initProxyVars: vars,
@@ -105,6 +114,7 @@ func newInitProxyOpts(vars initProxyVars) (*initProxyOpts, error) {
 		deployer:      deployer,
 		ws:            ws,
 		sel:           selector.NewConfigSelector(prompter, store),
+		cmdRunner:     cmd,
 	}
 	return opts, nil
 }
@@ -166,12 +176,29 @@ func (o *initProxyOpts) Execute() error {
 
 	o.securityGroupId = cloudformation.SecurityGroupId
 
-	_, err := o.startTask(o.securityGroupId)
+	err := o.writeFiles()
+	if err != nil {
+		o.deleteFiles()
+		return err
+	}
+	defer o.deleteFiles()
+
+	o.publicIpAddress, err = o.startTask(o.securityGroupId)
 	if err != nil {
 		errCh <- err
 	}
-
-	// TODO: exec ssh -D 9000 -qCN -f root@${publicIP} and define cleanup
+	log.Successln("Started bastion host.")
+	err = o.startSSHProxy()
+	if err != nil {
+		errCh <- err
+	}
+	log.Successln("Started ssh proxy server.")
+	log.Infoln("You can now connect to your backend services by routing traffic")
+	log.Infof("through the SOCKS5 proxy configured at localhost:9000.\n")
+	log.Infoln("Example:")
+	log.Infoln(color.HighlightCodeBlock(fmt.Sprintf(`export http_proxy=socks5h://localhost:9000
+curl http://${SVC}.%s.%s.local:${PORT}/`, o.envName, o.appName)))
+	log.Infoln("This terminal will block until an interrupt, then tear down these resources.")
 
 	for {
 		select {
@@ -219,7 +246,7 @@ func (o *initProxyOpts) deploy() error {
 	return o.deployer.DeployProxy(os.Stderr, input, deployOpts...)
 }
 
-func (o *initProxyOpts) writeFiles() (dockerfilePath string, err error) {
+func (o *initProxyOpts) writeFiles() error {
 	log.Infoln("Writing temp files to disk...")
 	sshDockerfile := []byte(`FROM alpine:latest
 RUN apk add openssh
@@ -238,10 +265,11 @@ EXPOSE 22
 CMD ["/usr/sbin/sshd", "-D"]
 `)
 
-	dockerfilePath, err = o.ws.WriteBastionFile("bastion.Dockerfile", o.envName, sshDockerfile)
+	dockerfilePath, err := o.ws.WriteBastionFile("bastion.Dockerfile", o.envName, sshDockerfile)
 	if err != nil {
-		return "", err
+		return err
 	}
+	o.dockerfilePath = dockerfilePath
 
 	sshdConfig := []byte(`PasswordAuthentication no
 PermitEmptyPasswords no
@@ -254,18 +282,28 @@ Match User root
 `)
 	_, err = o.ws.WriteBastionFile("sshd_config", o.envName, sshdConfig)
 	if err != nil {
-		return "", err
+		return err
 	}
 	log.Infoln("Generating a new rsa keypair...")
 	pubKey, privKey, err := generateKeyPair()
 	if err != nil {
-		return "", err
+		return err
 	}
 
-	o.ws.WriteBastionFile("id_rsa", o.envName, privKey)
-	o.ws.WriteBastionFile("authorized_keys", o.envName, pubKey)
+	idRsaPath, err := o.ws.WriteBastionFile("id_rsa", o.envName, privKey)
+	if err != nil {
+		return err
+	}
+	o.idRsaPath = idRsaPath
+	if err = o.cmdRunner.Run("chmod", []string{"0600", idRsaPath}); err != nil {
+		return err
+	}
+	_, err = o.ws.WriteBastionFile("authorized_keys", o.envName, pubKey)
+	if err != nil {
+		return err
+	}
 
-	return dockerfilePath, nil
+	return nil
 }
 
 func (o *initProxyOpts) deleteFiles() {
@@ -273,7 +311,7 @@ func (o *initProxyOpts) deleteFiles() {
 }
 
 func (o *initProxyOpts) startSSHProxy() error {
-	// TODO
+	o.cmdRunner.Run("ssh", []string{"-oStrictHostKeyChecking=no", "-D", "9000", "-i", o.idRsaPath, "-CNf", fmt.Sprintf("%s@%s", defaultUserName, o.publicIpAddress)})
 	return nil
 }
 
@@ -302,19 +340,17 @@ func generateKeyPair() ([]byte, []byte, error) {
 }
 
 func (o *initProxyOpts) startTask(securityGroupId string) (string, error) {
-	dockerFilePath, err := o.writeFiles()
-	defer o.deleteFiles()
-
 	// configure runner
 	taskRunner, err := newTaskRunOpts(runTaskVars{
 		count:                 1,
 		cpu:                   256,
 		memory:                512,
-		dockerfilePath:        dockerFilePath,
-		dockerfileContextPath: filepath.Dir(dockerFilePath),
+		dockerfilePath:        o.dockerfilePath,
+		dockerfileContextPath: filepath.Dir(o.dockerfilePath),
 		securityGroups:        []string{securityGroupId},
 		env:                   o.envName,
 		appName:               o.appName,
+		groupName:             "task-proxy",
 	})
 	if err != nil {
 		return "", err
@@ -326,6 +362,7 @@ func (o *initProxyOpts) startTask(securityGroupId string) (string, error) {
 	if len(taskRunner.publicIPs) != 1 {
 		return "", errors.New("expected exactly 1 public IP")
 	}
+
 	var publicIP string
 	for _, ip := range taskRunner.publicIPs {
 		publicIP = ip
@@ -343,6 +380,7 @@ func (o *initProxyOpts) waitForCleanup() (chan bool, chan error) {
 		<-c
 		log.Infoln("received sigterm")
 		o.bestEffortCleanup()
+		close(errCh)
 		done <- true
 	}()
 	go func() {
@@ -362,12 +400,20 @@ func (o *initProxyOpts) bestEffortCleanup() {
 }
 
 func (o *initProxyOpts) stopSSH() {
-	//TODO
+	//TODO; Right now stopSSH is a noop because destroying the task breaks the pipe.
+	return
 }
 
 func (o *initProxyOpts) stopTask() {
 	//TODO
-	o.tas
+	deleter, _ := newDeleteTaskOpts(deleteTaskVars{
+		name:             "task-proxy",
+		app:              o.appName,
+		env:              o.envName,
+		skipConfirmation: true,
+		defaultCluster:   false,
+	})
+	deleter.Execute()
 }
 
 func (o *initProxyOpts) deleteStack() {
@@ -390,7 +436,6 @@ func BuildProxyInitCmd() *cobra.Command {
 			if err := opts.Validate(); err != nil { // validate flags
 				return err
 			}
-			log.Warningln("It's best to run this command in the root of your workspace.")
 			if err := opts.Ask(); err != nil {
 				return err
 			}
