@@ -164,6 +164,8 @@ func (o *initProxyOpts) Execute() error {
 		errCh <- err
 	}
 
+	o.securityGroupId = cloudformation.SecurityGroupId
+
 	_, err := o.startTask(o.securityGroupId)
 	if err != nil {
 		errCh <- err

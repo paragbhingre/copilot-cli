@@ -12,6 +12,8 @@ import (
 	"github.com/aws/copilot-cli/internal/pkg/deploy/cloudformation/stack"
 )
 
+var SecurityGroupId string
+
 const proxyStackName = "Proxy"
 
 // DeployTask deploys proxy stack
@@ -29,6 +31,14 @@ func (cf CloudFormation) DeployProxy(out progress.FileWriter, input *deploy.Crea
 		var errChangeSetEmpty *cloudformation.ErrChangeSetEmpty
 		if !errors.As(err, &errChangeSetEmpty) {
 			return err
+		}
+	}
+
+	cfnMap, err := cf.cfnClient.Outputs(stack)
+
+	if err == nil {
+		for _, entry := range cfnMap {
+			SecurityGroupId = entry
 		}
 	}
 	return nil
