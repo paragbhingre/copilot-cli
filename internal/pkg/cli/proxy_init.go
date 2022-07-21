@@ -218,10 +218,8 @@ curl http://${SVC}.%s.%s.local:${PORT}/`, o.envName, o.appName)))
 func (o *initProxyOpts) configureSessForProxy() error {
 	var sess *session.Session
 	var err error
-	fmt.Println("inside configureSessForProxy")
 	sessProvider := sessions.ImmutableProvider(sessions.UserAgentExtras("proxy init"))
 	sess, err = sessProvider.Default()
-	fmt.Println("inside configureSessForProxy1")
 	if err != nil {
 		return fmt.Errorf("get default session: %w", err)
 	}
@@ -378,13 +376,17 @@ func (o *initProxyOpts) waitForCleanup() (chan bool, chan error) {
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
 	go func() {
 		<-c
-		log.Infoln("received sigterm")
+		log.Infoln("\nreceived sigterm")
 		o.bestEffortCleanup()
 		close(errCh)
 		done <- true
 	}()
 	go func() {
 		err := <-errCh
+		if err == nil {
+			done <- true
+			return
+		}
 		log.Errorf("Error setting up proxy: %w", err)
 		o.bestEffortCleanup()
 		errCh <- err
