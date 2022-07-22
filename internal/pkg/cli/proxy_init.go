@@ -164,7 +164,7 @@ func (o *initProxyOpts) askEnvName() error {
 
 // Execute writes the service's manifest file and stores the service in SSM.
 func (o *initProxyOpts) Execute() error {
-	done, errCh := o.waitForCleanup()
+	doneCh, errCh := o.waitForCleanup()
 
 	if err := o.configureSessForProxy(); err != nil {
 		errCh <- err
@@ -202,7 +202,7 @@ curl http://${SVC}.%s.%s.local:${PORT}/`, o.envName, o.appName)))
 
 	for {
 		select {
-		case <-done:
+		case <-doneCh:
 			select {
 			case err = <-errCh:
 				return err
@@ -371,7 +371,7 @@ func (o *initProxyOpts) startTask(securityGroupId string) (string, error) {
 
 func (o *initProxyOpts) waitForCleanup() (chan bool, chan error) {
 	errCh := make(chan error)
-	done := make(chan bool)
+	doneCh := make(chan bool)
 	c := make(chan os.Signal, 2)
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
 	go func() {
@@ -379,20 +379,20 @@ func (o *initProxyOpts) waitForCleanup() (chan bool, chan error) {
 		log.Infoln("\nreceived sigterm")
 		o.bestEffortCleanup()
 		close(errCh)
-		done <- true
+		doneCh <- true
 	}()
 	go func() {
 		err := <-errCh
 		if err == nil {
-			done <- true
+			doneCh <- true
 			return
 		}
 		log.Errorf("Error setting up proxy: %w", err)
 		o.bestEffortCleanup()
 		errCh <- err
-		done <- true
+		doneCh <- true
 	}()
-	return done, errCh
+	return doneCh, errCh
 }
 
 func (o *initProxyOpts) bestEffortCleanup() {
