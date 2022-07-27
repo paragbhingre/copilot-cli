@@ -73,7 +73,6 @@ func UserAgentExtras(extras ...string) func(*Provider) {
 // Default returns a session configured against the "default" AWS profile.
 // Default assumes that a region must be present with a session, otherwise it returns an error.
 func (p *Provider) Default() (*session.Session, error) {
-	fmt.Println("inside Default here")
 	sess, err := p.defaultSession()
 	if err != nil {
 		return nil, err
@@ -81,7 +80,6 @@ func (p *Provider) Default() (*session.Session, error) {
 	if aws.StringValue(sess.Config.Region) == "" {
 		return nil, &errMissingRegion{}
 	}
-	fmt.Println("inside Default ")
 	return sess, nil
 }
 
@@ -161,7 +159,6 @@ func (p *Provider) defaultSession() (*session.Session, error) {
 	if p.defaultSess != nil {
 		return p.defaultSess, nil
 	}
-	fmt.Println("inside default session method")
 	sess, err := session.NewSessionWithOptions(session.Options{
 		Config:                  *newConfig(),
 		SharedConfigState:       session.SharedConfigEnable,
@@ -176,7 +173,6 @@ func (p *Provider) defaultSession() (*session.Session, error) {
 		}
 		return nil, err
 	}
-	fmt.Println("continue ")
 	sess.Handlers.Build.PushBackNamed(p.userAgentHandler())
 	p.defaultSess = sess
 	return sess, nil
