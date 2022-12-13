@@ -260,9 +260,9 @@ func TestRuntimePlatformOpts_IsDefault(t *testing.T) {
 }
 
 func TestHTTPTargetContainer_IsHTTPS(t *testing.T) {
-	require.True(t, HTTPTargetContainer{Port: "443"}.IsHTTPS())
-	require.False(t, HTTPTargetContainer{}.IsHTTPS())
-	require.False(t, HTTPTargetContainer{Port: "8080"}.IsHTTPS())
+	require.True(t, ApplicationLoadBalancerListener{Port: "443"}.IsHTTPS())
+	require.False(t, ApplicationLoadBalancerListener{}.IsHTTPS())
+	require.False(t, ApplicationLoadBalancerListener{Port: "8080"}.IsHTTPS())
 }
 
 func TestSsmOrSecretARN_RequiresSub(t *testing.T) {
@@ -287,41 +287,33 @@ func TestSecretsManagerName_ValueFrom(t *testing.T) {
 
 func TestWorkload_HealthCheckProtocol(t *testing.T) {
 	testCases := map[string]struct {
-		opts     WorkloadOpts
+		albl     ApplicationLoadBalancerListener
 		expected string
 	}{
 		"target port 80, health check port unset": {
-			opts: WorkloadOpts{
-				HTTPTargetContainer: HTTPTargetContainer{
-					Port: "80",
-				},
+			albl: ApplicationLoadBalancerListener{
+				Port: "80",
 			},
 		},
 		"target port 80, health check port 443": {
-			opts: WorkloadOpts{
-				HTTPTargetContainer: HTTPTargetContainer{
-					Port: "80",
-				},
-				HTTPHealthCheck: HTTPHealthCheckOpts{
+			albl: ApplicationLoadBalancerListener{
+				Port: "80",
+				HealthCheck: HTTPHealthCheckOpts{
 					Port: "443",
 				},
 			},
 			expected: "HTTPS",
 		},
 		"target port 443, health check port unset": {
-			opts: WorkloadOpts{
-				HTTPTargetContainer: HTTPTargetContainer{
-					Port: "443",
-				},
+			albl: ApplicationLoadBalancerListener{
+				Port: "443",
 			},
 			expected: "HTTPS",
 		},
 		"target port 443, health check port 80": {
-			opts: WorkloadOpts{
-				HTTPTargetContainer: HTTPTargetContainer{
-					Port: "443",
-				},
-				HTTPHealthCheck: HTTPHealthCheckOpts{
+			albl: ApplicationLoadBalancerListener{
+				Port: "443",
+				HealthCheck: HTTPHealthCheckOpts{
 					Port: "80",
 				},
 			},
@@ -331,7 +323,7 @@ func TestWorkload_HealthCheckProtocol(t *testing.T) {
 
 	for name, tc := range testCases {
 		t.Run(name, func(t *testing.T) {
-			require.Equal(t, tc.expected, tc.opts.HealthCheckProtocol())
+			require.Equal(t, tc.expected, tc.albl.HealthCheckProtocol())
 		})
 	}
 }

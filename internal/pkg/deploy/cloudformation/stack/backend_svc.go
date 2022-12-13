@@ -145,6 +145,7 @@ func (s *BackendService) Template() (string, error) {
 		scConfig = convertServiceConnect(s.manifest.Network.Connect)
 	}
 	targetContainer, targetContainerPort := s.httpLoadBalancerTarget()
+	albConfig, err := s.convertApplicationLoadBalancer()
 	content, err := s.parser.ParseBackendService(template.WorkloadOpts{
 		AppName:            s.app,
 		EnvName:            s.env,
@@ -189,6 +190,7 @@ func (s *BackendService) Template() (string, error) {
 		Platform:                 convertPlatform(s.manifest.Platform),
 		HTTPVersion:              convertHTTPVersion(s.manifest.RoutingRule.ProtocolVersion),
 		ALBEnabled:               s.albEnabled,
+		ALB:                      albConfig.settings,
 		Observability: template.ObservabilityOpts{
 			Tracing: strings.ToUpper(aws.StringValue(s.manifest.Observability.Tracing)),
 		},

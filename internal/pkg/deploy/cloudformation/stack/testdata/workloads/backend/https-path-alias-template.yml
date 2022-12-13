@@ -219,13 +219,13 @@ Resources:
       Name: !Ref WorkloadName
       NamespaceId:
         Fn::ImportValue: !Sub '${AppName}-${EnvName}-ServiceDiscoveryNamespaceID'
-  TargetGroup:
+  httpspathalias80TargetGroup:
     Metadata:
       'aws:copilot:description': "A target group to connect the load balancer to your service"
     Type: AWS::ElasticLoadBalancingV2::TargetGroup
     Properties:
       HealthCheckPath: / # Default is '/'.
-      Port: !Ref TargetPort
+      Port: 80
       Protocol: HTTP
       TargetGroupAttributes:
         - Key: deregistration_delay.timeout_seconds
@@ -408,7 +408,7 @@ Resources:
       LoadBalancers:
         - ContainerName: !Ref TargetContainer
           ContainerPort: !Ref TargetPort
-          TargetGroupArn: !Ref TargetGroup
+          TargetGroupArn: !Ref httpspathalias80TargetGroup
   AddonsStack:
     Metadata:
       'aws:copilot:description': 'An Addons CloudFormation Stack for your additional AWS resources'

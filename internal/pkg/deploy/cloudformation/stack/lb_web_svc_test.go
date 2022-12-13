@@ -299,6 +299,31 @@ Outputs:
 					Name:          "frontend80",
 				},
 			},
+			ALB: &template.ApplicationLoadBalancer{
+				Listener: []template.ApplicationLoadBalancerListener{
+					{
+						Path:      "frontend",
+						Protocol:  "TCP",
+						Container: "frontend",
+						Port:      "80",
+						Aliases: []string{
+							"mockAlias",
+						},
+						HealthCheck: template.HTTPHealthCheckOpts{
+							HealthCheckPath: "/",
+							GracePeriod:     60,
+							Port:            "",
+							SuccessCodes:    "",
+						},
+						HostedZoneAliases: template.AliasesForHostedZone{
+							"mockHostedZone": {
+								"mockAlias",
+							},
+						},
+					},
+				},
+				MainContainerPort: "80",
+			},
 		}, actual)
 	})
 

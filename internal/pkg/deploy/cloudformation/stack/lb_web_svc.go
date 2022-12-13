@@ -211,6 +211,11 @@ func (s *LoadBalancedWebService) Template() (string, error) {
 			sidecar.EnvAddonsFeatureFlag = s.EnvAddonsFeatureFlag
 		}
 	}
+
+	albConfig, err := s.convertApplicationLoadBalancer()
+	if err != nil {
+		return "", err
+	}
 	content, err := s.parser.ParseLoadBalancedWebService(template.WorkloadOpts{
 		AppName:            s.app,
 		EnvName:            s.env,
@@ -254,6 +259,7 @@ func (s *LoadBalancedWebService) Template() (string, error) {
 		Platform:                 convertPlatform(s.manifest.Platform),
 		HTTPVersion:              convertHTTPVersion(s.manifest.RoutingRule.ProtocolVersion),
 		NLB:                      nlbConfig.settings,
+		ALB:                      albConfig.settings,
 		DeploymentConfiguration:  convertDeploymentConfig(s.manifest.DeployConfig),
 		AppDNSName:               nlbConfig.appDNSName,
 		AppDNSDelegationRole:     nlbConfig.appDNSDelegationRole,

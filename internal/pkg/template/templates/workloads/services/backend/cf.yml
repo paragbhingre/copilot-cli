@@ -108,9 +108,11 @@ Resources:
       HealthCheckGracePeriodSeconds: {{.HTTPHealthCheck.GracePeriod}}
       {{- end }}
       LoadBalancers:
+        {{- range $listener := .ALB.Listener}}
         - ContainerName: !Ref TargetContainer
           ContainerPort: !Ref TargetPort
-          TargetGroupArn: !Ref TargetGroup
+          TargetGroupArn: !Ref {{ logicalIDSafe $listener.Container}}{{$listener.Port}}TargetGroup
+        {{- end}}
       {{- end}}
 
 {{include "efs-access-point" . | indent 2}}

@@ -417,6 +417,14 @@ type networkLoadBalancerConfig struct {
 	appDNSName           *string
 }
 
+type applicationLoadBalancerConfig struct {
+	settings *template.ApplicationLoadBalancer
+
+	// If a domain is associated these values are not empty.
+	//appDNSDelegationRole *string
+	//appDNSName           *string
+}
+
 func convertELBAccessLogsConfig(mft *manifest.Environment) (*template.ELBAccessLogs, error) {
 	elbAccessLogsArgs, isELBAccessLogsSet := mft.ELBAccessLogs()
 	if !isELBAccessLogsSet {
@@ -558,6 +566,86 @@ func (s *LoadBalancedWebService) convertNetworkLoadBalancer() (networkLoadBalanc
 		dnsDelegationRole, dnsName := convertAppInformation(s.appInfo)
 		config.appDNSName = dnsName
 		config.appDNSDelegationRole = dnsDelegationRole
+	}
+	return config, nil
+}
+
+func (s *LoadBalancedWebService) convertApplicationLoadBalancer() (applicationLoadBalancerConfig, error) {
+	albConfig := s.manifest.RoutingRule
+	if albConfig.IsEmpty() {
+		return applicationLoadBalancerConfig{}, nil
+	}
+	targetContainer, targetPort := s.httpLoadBalancerTarget()
+	var aliases []string
+	var err error
+	if s.httpsEnabled {
+		if aliases, err = convertAlias(s.manifest.RoutingRule.Alias); err != nil {
+			return applicationLoadBalancerConfig{}, err
+		}
+	}
+
+	aliasesFor, err := convertHostedZone(s.manifest.RoutingRule.RoutingRuleConfiguration)
+	if err != nil {
+		return applicationLoadBalancerConfig{}, fmt.Errorf(`convert "http.alias" to string slice: %w`, err)
+	}
+
+	hc := convertHTTPHealthCheck(&albConfig.HealthCheck)
+	config := applicationLoadBalancerConfig{
+		settings: &template.ApplicationLoadBalancer{
+			Listener: []template.ApplicationLoadBalancerListener{
+				{
+					Protocol:  "TCP",
+					Path:      aws.StringValue(albConfig.Path),
+					Container: aws.StringValue(targetContainer),
+					Port:      aws.StringValue(targetPort),
+					//SSLPolicy:       nlbConfig.SSLPolicy,
+					Aliases:           aliases,
+					HostedZoneAliases: aliasesFor,
+					HealthCheck:       hc,
+				},
+			},
+			MainContainerPort: s.containerPort(),
+		},
+	}
+	return config, nil
+}
+
+func (s *BackendService) convertApplicationLoadBalancer() (applicationLoadBalancerConfig, error) {
+	albConfig := s.manifest.RoutingRule
+	if albConfig.IsEmpty() {
+		return applicationLoadBalancerConfig{}, nil
+	}
+	targetContainer, targetPort := s.httpLoadBalancerTarget()
+	var aliases []string
+	var err error
+	if s.httpsEnabled {
+		if aliases, err = convertAlias(s.manifest.RoutingRule.Alias); err != nil {
+			return applicationLoadBalancerConfig{}, err
+		}
+	}
+
+	hostedZoneAliases, err := convertHostedZone(s.manifest.RoutingRule)
+	if err != nil {
+		return applicationLoadBalancerConfig{}, fmt.Errorf(`convert "http.alias" to string slice: %w`, err)
+	}
+
+	hc := convertHTTPHealthCheck(&albConfig.HealthCheck)
+	config := applicationLoadBalancerConfig{
+		settings: &template.ApplicationLoadBalancer{
+			Listener: []template.ApplicationLoadBalancerListener{
+				{
+					Protocol:  "TCP",
+					Path:      aws.StringValue(albConfig.Path),
+					Container: aws.StringValue(targetContainer),
+					Port:      aws.StringValue(targetPort),
+					//SSLPolicy:       nlbConfig.SSLPolicy,
+					Aliases:           aliases,
+					HostedZoneAliases: hostedZoneAliases,
+					HealthCheck:       hc,
+				},
+			},
+			MainContainerPort: s.containerPort(),
+		},
 	}
 	return config, nil
 }

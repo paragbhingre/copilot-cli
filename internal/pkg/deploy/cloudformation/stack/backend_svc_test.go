@@ -494,6 +494,28 @@ Outputs:
 					Name:          "api8080",
 				},
 			},
+			ALB: &template.ApplicationLoadBalancer{
+				Listener: []template.ApplicationLoadBalancerListener{
+					{
+						Path:      "/albPath",
+						Protocol:  "TCP",
+						Container: "envoy",
+						Port:      "443",
+						HealthCheck: template.HTTPHealthCheckOpts{
+							HealthCheckPath:    "/healthz",
+							GracePeriod:        60,
+							Port:               "4200",
+							SuccessCodes:       "418",
+							HealthyThreshold:   aws.Int64(64),
+							UnhealthyThreshold: aws.Int64(63),
+							Interval:           aws.Int64(61),
+							Timeout:            aws.Int64(62),
+						},
+						HostedZoneAliases: template.AliasesForHostedZone{},
+					},
+				},
+				MainContainerPort: "8080",
+			},
 			ALBEnabled: true,
 		}, actual)
 	})

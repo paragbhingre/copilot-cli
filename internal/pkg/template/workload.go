@@ -142,7 +142,7 @@ type SidecarOpts struct {
 	Command              []string
 	HealthCheck          *ContainerHealthCheck
 	EnvAddonsFeatureFlag bool
-  PortMappings []*PortMapping
+	PortMappings         []*PortMapping
 }
 
 // SidecarStorageOpts holds data structures for rendering Mount Points inside of a sidecar.
@@ -230,8 +230,8 @@ func (tg HTTPTargetContainer) Exposed() bool {
 }
 
 // IsHTTPS returns true if the target container's port is 443.
-func (tg HTTPTargetContainer) IsHTTPS() bool {
-	return tg.Port == "443"
+func (albl ApplicationLoadBalancerListener) IsHTTPS() bool {
+	return albl.Port == "443"
 }
 
 // HTTPHealthCheckOpts holds configuration that's needed for HTTP Health Check.
@@ -372,6 +372,24 @@ type NetworkLoadBalancerListener struct {
 	HealthCheck NLBHealthCheck
 }
 
+// ApplicationLoadBalancerListener holds configuration that's need for an Application Load Balancer listener.
+type ApplicationLoadBalancerListener struct {
+	// The path and protocol that the Application Load Balancer listens to.
+	Path     string
+	Protocol string
+
+	// The target container and port to which the traffic is routed to from the Application Load Balancer.
+	Container string
+	Port      string
+
+	//SSLPolicy *string // The SSL policy applied when using TLS protocol.
+
+	Aliases           []string
+	Stickiness        *bool
+	HealthCheck       HTTPHealthCheckOpts
+	HostedZoneAliases AliasesForHostedZone
+}
+
 // NLBHealthCheck holds configuration for Network Load Balancer health check.
 type NLBHealthCheck struct {
 	Port               string // The port to which health check requests made from Network Load Balancer are routed to.
@@ -385,6 +403,13 @@ type NLBHealthCheck struct {
 type NetworkLoadBalancer struct {
 	PublicSubnetCIDRs []string
 	Listener          NetworkLoadBalancerListener
+	MainContainerPort string
+}
+
+// ApplicationLoadBalancer holds configuration that's needed for an Application Load Balancer.
+type ApplicationLoadBalancer struct {
+	PublicSubnetCIDRs []string
+	Listener          []ApplicationLoadBalancerListener
 	MainContainerPort string
 }
 
@@ -639,6 +664,7 @@ type WorkloadOpts struct {
 	DeregistrationDelay     *int64
 	AllowedSourceIps        []string
 	NLB                     *NetworkLoadBalancer
+	ALB                     *ApplicationLoadBalancer
 	DeploymentConfiguration DeploymentConfigurationOpts
 	ServiceConnect          *ServiceConnect
 
@@ -667,7 +693,7 @@ type WorkloadOpts struct {
 	Subscribe            *SubscribeOpts
 	EnvAddonsFeatureFlag bool
 
-  // Multiple ports configurations
+	// Multiple ports configurations
 	PortMappings []*PortMapping
 }
 
@@ -675,13 +701,13 @@ type WorkloadOpts struct {
 // or an empty string if it shouldn't be configured, defaulting to the
 // target protocol. (which is what happens, even if it isn't documented as such :))
 // https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-elasticloadbalancingv2-targetgroup.html#cfn-elasticloadbalancingv2-targetgroup-healthcheckprotocol
-func (w WorkloadOpts) HealthCheckProtocol() string {
+func (albl ApplicationLoadBalancerListener) HealthCheckProtocol() string {
 	switch {
-	case w.HTTPHealthCheck.Port == "443":
+	case albl.HealthCheck.Port == "443":
 		return "HTTPS"
-	case w.HTTPTargetContainer.IsHTTPS() && w.HTTPHealthCheck.Port == "":
+	case albl.Port == "443" && albl.HealthCheck.Port == "":
 		return "HTTPS"
-	case w.HTTPTargetContainer.IsHTTPS() && w.HTTPHealthCheck.Port != "443":
+	case albl.Port == "443" && albl.HealthCheck.Port != "443":
 		// for backwards compatability, only set HTTP if target
 		// container is https but the specified health check port is not
 		return "HTTP"

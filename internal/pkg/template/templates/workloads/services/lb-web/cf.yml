@@ -119,9 +119,11 @@ Resources:
       {{- end }}
       LoadBalancers:
   {{- if .ALBEnabled}}
+  {{- range $listener := .ALB.Listener}}
         - ContainerName: !Ref TargetContainer
           ContainerPort: !Ref TargetPort
-          TargetGroupArn: !Ref TargetGroup
+          TargetGroupArn: !Ref {{ logicalIDSafe $listener.Container}}{{$listener.Port}}TargetGroup
+  {{- end}}
   {{- end}}
   {{- if .NLB}}
         - ContainerName: {{.NLB.Listener.TargetContainer}}
