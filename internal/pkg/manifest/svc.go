@@ -495,6 +495,36 @@ func (rr RoutingRuleConfiguration) exposedPorts(exposedPorts []ExposedPort, work
 	}
 }
 
+func (cfg NetworkLoadBalancerConfiguration) exposedPorts(exposedPorts []ExposedPort, workloadName string) ([]ExposedPort, error) {
+	if cfg.IsEmpty() {
+		return nil, nil
+	}
+	containerName := workloadName
+	if cfg.TargetContainer != nil {
+		containerName = aws.StringValue(cfg.TargetContainer)
+	}
+	NLBPort, err := strconv.ParseUint(aws.StringValue(cfg.Port), 10, 16)
+	if err != nil {
+		return nil, err
+	}
+	containerPort := uint16(NLBPort)
+	if cfg.TargetPort != nil {
+		containerPort = uint16(aws.IntValue(cfg.TargetPort))
+	}
+	for _, exposedPort := range exposedPorts {
+		if containerPort == exposedPort.Port && cfg.TargetContainer == nil {
+			return nil, nil
+		}
+	}
+	return []ExposedPort{
+		{
+			Port:          containerPort,
+			Protocol:      "tcp",
+			ContainerName: containerName,
+		},
+	}, nil
+}
+
 func (sidecar SidecarConfig) exposedPorts(sidecarName string) ([]ExposedPort, error) {
 	if sidecar.Port == nil {
 		return nil, nil
