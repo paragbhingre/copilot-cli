@@ -189,6 +189,8 @@ func (s *LoadBalancedWebService) Template() (string, error) {
 		allowedSourceIPs = append(allowedSourceIPs, string(ipNet))
 	}
 	nlbConfig, err := s.convertNetworkLoadBalancer()
+	albConfig, err := s.convertApplicationLoadBalancer()
+
 	if err != nil {
 		return "", err
 	}
@@ -255,6 +257,7 @@ func (s *LoadBalancedWebService) Template() (string, error) {
 		Platform:                 convertPlatform(s.manifest.Platform),
 		HTTPVersion:              convertHTTPVersion(s.manifest.RoutingRule.ProtocolVersion),
 		NLB:                      nlbConfig.settings,
+		ALB:                      albConfig.settings,
 		DeploymentConfiguration:  convertDeploymentConfig(s.manifest.DeployConfig),
 		AppDNSName:               nlbConfig.appDNSName,
 		AppDNSDelegationRole:     nlbConfig.appDNSDelegationRole,

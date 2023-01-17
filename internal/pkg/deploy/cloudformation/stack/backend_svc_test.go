@@ -484,6 +484,32 @@ Outputs:
 			EntryPoint: []string{"enter", "from"},
 			Command:    []string{"here"},
 			ALBEnabled: true,
+			ALB: &template.ApplicationLoadBalancer{
+				Listener: []template.ApplicationLoadBalancerListener{
+					{
+						Path:            "/albPath",
+						Protocol:        "TCP",
+						TargetContainer: "envoy",
+						TargetPort:      "443",
+						HTTPHealthCheck: template.HTTPHealthCheckOpts{
+							HealthCheckPath:    "/healthz",
+							GracePeriod:        60,
+							Port:               "4200",
+							SuccessCodes:       "418",
+							HealthyThreshold:   aws.Int64(64),
+							UnhealthyThreshold: aws.Int64(63),
+							Interval:           aws.Int64(61),
+							Timeout:            aws.Int64(62),
+						},
+						HostedZoneAliases: template.AliasesForHostedZone{},
+						AllowedSourceIps: []string{
+							"10.0.1.0/24",
+						},
+						Stickiness: "true",
+					},
+				},
+				MainContainerPort: "8080",
+			},
 			PortMappings: []*template.PortMapping{
 				{
 					Protocol:      "tcp",
