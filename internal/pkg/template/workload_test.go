@@ -267,9 +267,9 @@ func TestRuntimePlatformOpts_IsDefault(t *testing.T) {
 }
 
 func TestHTTPTargetContainer_IsHTTPS(t *testing.T) {
-	require.True(t, HTTPTargetContainer{Port: "443"}.IsHTTPS())
-	require.False(t, HTTPTargetContainer{}.IsHTTPS())
-	require.False(t, HTTPTargetContainer{Port: "8080"}.IsHTTPS())
+	require.True(t, ApplicationLoadBalancerListener{TargetPort: "443"}.IsHTTPS())
+	require.False(t, ApplicationLoadBalancerListener{}.IsHTTPS())
+	require.False(t, ApplicationLoadBalancerListener{TargetPort: "8080"}.IsHTTPS())
 }
 
 func TestPlainSSMOrSecretARN_RequiresSub(t *testing.T) {
@@ -314,21 +314,18 @@ func TestSecretsManagerName_ValueFrom(t *testing.T) {
 
 func TestWorkload_HealthCheckProtocol(t *testing.T) {
 	testCases := map[string]struct {
-		opts     WorkloadOpts
+		albl     ApplicationLoadBalancerListener
 		expected string
 	}{
 		"target port 80, health check port unset": {
-			opts: WorkloadOpts{
-				HTTPTargetContainer: HTTPTargetContainer{
-					Port: "80",
-				},
+			albl: ApplicationLoadBalancerListener{
+				TargetPort: "80",
 			},
 		},
 		"target port 80, health check port 443": {
-			opts: WorkloadOpts{
-				HTTPTargetContainer: HTTPTargetContainer{
-					Port: "80",
-				},
+
+			albl: ApplicationLoadBalancerListener{
+				TargetPort: "80",
 				HTTPHealthCheck: HTTPHealthCheckOpts{
 					Port: "443",
 				},
@@ -336,18 +333,14 @@ func TestWorkload_HealthCheckProtocol(t *testing.T) {
 			expected: "HTTPS",
 		},
 		"target port 443, health check port unset": {
-			opts: WorkloadOpts{
-				HTTPTargetContainer: HTTPTargetContainer{
-					Port: "443",
-				},
+			albl: ApplicationLoadBalancerListener{
+				TargetPort: "443",
 			},
 			expected: "HTTPS",
 		},
 		"target port 443, health check port 80": {
-			opts: WorkloadOpts{
-				HTTPTargetContainer: HTTPTargetContainer{
-					Port: "443",
-				},
+			albl: ApplicationLoadBalancerListener{
+				TargetPort: "443",
 				HTTPHealthCheck: HTTPHealthCheckOpts{
 					Port: "80",
 				},
@@ -358,7 +351,7 @@ func TestWorkload_HealthCheckProtocol(t *testing.T) {
 
 	for name, tc := range testCases {
 		t.Run(name, func(t *testing.T) {
-			require.Equal(t, tc.expected, tc.opts.HealthCheckProtocol())
+			require.Equal(t, tc.expected, tc.albl.HealthCheckProtocol())
 		})
 	}
 }
@@ -451,32 +444,31 @@ func TestEnvControllerParameters(t *testing.T) {
 
 func TestRollingUpdateRollbackConfig_TruncateAlarmName(t *testing.T) {
 	testCases := map[string]struct {
-		config   RollingUpdateRollbackConfig
-		inApp    string
-		inEnv    string
-		inSvc    string
+		config      RollingUpdateRollbackConfig
+		inApp       string
+		inEnv       string
+		inSvc       string
 		inAlarmType string
-		expected string
+		expected    string
 	}{
 		"with no need to truncate": {
-			inApp: "shortAppName",
-			inEnv: "shortEnvName",
-			inSvc: "shortSvcName",
+			inApp:       "shortAppName",
+			inEnv:       "shortEnvName",
+			inSvc:       "shortSvcName",
 			inAlarmType: "CopilotRollbackMemAlarm",
-			expected: "shortAppName-shortEnvName-shortSvcName-CopilotRollbackMemAlarm",
+			expected:    "shortAppName-shortEnvName-shortSvcName-CopilotRollbackMemAlarm",
 		},
 		"with need to truncate at 76 chars per element": {
-			inApp: "12345678911234567892123456789312345678941234567895123456789612345678971234567898",
-			inEnv: "12345678911234567892123456789312345678941234567895123456789612345678971234567898",
-			inSvc: "12345678911234567892123456789312345678941234567895123456789612345678971234567898",
+			inApp:       "12345678911234567892123456789312345678941234567895123456789612345678971234567898",
+			inEnv:       "12345678911234567892123456789312345678941234567895123456789612345678971234567898",
+			inSvc:       "12345678911234567892123456789312345678941234567895123456789612345678971234567898",
 			inAlarmType: "CopilotRollbackCPUAlarm",
-			expected: "1234567891123456789212345678931234567894123456789512345678961234567897123456-1234567891123456789212345678931234567894123456789512345678961234567897123456-1234567891123456789212345678931234567894123456789512345678961234567897123456-CopilotRollbackCPUAlarm",
+			expected:    "1234567891123456789212345678931234567894123456789512345678961234567897123456-1234567891123456789212345678931234567894123456789512345678961234567897123456-1234567891123456789212345678931234567894123456789512345678961234567897123456-CopilotRollbackCPUAlarm",
 		},
-		
 	}
 	for name, tc := range testCases {
-	t.Run(name, func(t *testing.T) {
-		require.Equal(t, tc.expected, tc.config.TruncateAlarmName(tc.inApp, tc.inEnv, tc.inSvc, tc.inAlarmType))
-	})}
+		t.Run(name, func(t *testing.T) {
+			require.Equal(t, tc.expected, tc.config.TruncateAlarmName(tc.inApp, tc.inEnv, tc.inSvc, tc.inAlarmType))
+		})
+	}
 }
-
