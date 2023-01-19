@@ -133,7 +133,7 @@ NLBCustomDomainAction:
     ServiceName: !Ref WorkloadName
     RootDNSRole: {{ .AppDNSDelegationRole }}
     DomainName:  {{ .AppDNSName }}
-    Aliases: {{ .NLB.UniqueAliases }}
+    Aliases: {{ if .NLB.UniqueAliases }} {{ fmtSlice .NLB.UniqueAliases }} {{ else }} [] {{ end }}
 
 NLBCustomDomainFunction:
   Type: AWS::Lambda::Function
@@ -213,7 +213,7 @@ NLBCertValidatorAction:
     ServiceName: !Ref WorkloadName
     RootDNSRole: {{ .AppDNSDelegationRole }}
     DomainName:  {{ .AppDNSName }}
-    Aliases: {{ if .NLB.UniqueAliases }} {{ .NLB.UniqueAliases }} {{ else }} [] {{ end }}
+    Aliases: {{ if .NLB.UniqueAliases }} {{ fmtSlice .NLB.UniqueAliases }} {{ else }} [] {{ end }}
 
 NLBCertValidatorFunction:
   Type: AWS::Lambda::Function
