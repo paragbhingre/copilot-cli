@@ -76,10 +76,10 @@ func (d *LBWebServiceDescriber) URI(envName string) (URI, error) {
 		return URI{}, fmt.Errorf("get stack resources for service %s: %w", d.svc, err)
 	}
 	for _, resource := range resources {
-		if resource.LogicalID == svcStackResourceALBTargetGroupLogicalID {
+		if strings.HasPrefix(resource.LogicalID, svcStackResourceALBTargetGroupLogicalID) {
 			albEnabled = true
 		}
-		if resource.LogicalID == svcStackResourceNLBTargetGroupLogicalID {
+		if strings.HasPrefix(resource.LogicalID, svcStackResourceNLBTargetGroupLogicalID) {
 			nlbEnabled = true
 		}
 	}
