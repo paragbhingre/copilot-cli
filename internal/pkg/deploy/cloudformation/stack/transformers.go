@@ -162,10 +162,16 @@ func convertHostedZone(m manifest.RoutingRuleConfiguration) (template.AliasesFor
 	if len(m.Alias.AdvancedAliases) != 0 {
 		for _, alias := range m.Alias.AdvancedAliases {
 			if alias.HostedZone != nil {
+				if isDuplicateAliasEntry(aliasesFor[*alias.HostedZone], aws.StringValue(alias.Alias)) {
+					continue
+				}
 				aliasesFor[*alias.HostedZone] = append(aliasesFor[*alias.HostedZone], *alias.Alias)
 				continue
 			}
 			if defaultHostedZone != nil {
+				if isDuplicateAliasEntry(aliasesFor[*defaultHostedZone], aws.StringValue(alias.Alias)) {
+					continue
+				}
 				aliasesFor[*defaultHostedZone] = append(aliasesFor[*defaultHostedZone], *alias.Alias)
 			}
 		}
@@ -178,8 +184,24 @@ func convertHostedZone(m manifest.RoutingRuleConfiguration) (template.AliasesFor
 	if err != nil {
 		return nil, err
 	}
-	aliasesFor[*defaultHostedZone] = aliases
+
+	for _, alias := range aliases {
+		if isDuplicateAliasEntry(aliasesFor[*defaultHostedZone], alias) {
+			continue
+		}
+		aliasesFor[*defaultHostedZone] = append(aliasesFor[*defaultHostedZone], alias)
+	}
+
 	return aliasesFor, nil
+}
+
+func isDuplicateAliasEntry(aliasList []string, alias string) bool {
+	for _, entry := range aliasList {
+		if entry == alias {
+			return true
+		}
+	}
+	return false
 }
 
 // convertDependsOn converts image and sidecar depends on fields to have upper case statuses.
@@ -479,6 +501,10 @@ func (s *LoadBalancedWebService) convertNetworkLoadBalancer() (networkLoadBalanc
 	if protocol == nil {
 		protocol = aws.String(defaultNLBProtocol)
 	}
+	var certRequired bool
+	if strings.ToLower(aws.StringValue(protocol)) == "tls" {
+		certRequired = true
+	}
 
 	// Configure target container and port.
 	targetContainer := s.name
@@ -507,6 +533,10 @@ func (s *LoadBalancedWebService) convertNetworkLoadBalancer() (networkLoadBalanc
 		return networkLoadBalancerConfig{}, fmt.Errorf(`convert "nlb.alias" to string slice: %w`, err)
 	}
 
+	uniqueAliasMap := make(map[string]bool)
+	var uniqueAliases []string
+	uniqueAliases = append(uniqueAliases, uniqeAliasesForARecords(aliases, uniqueAliasMap)...)
+
 	hc := template.NLBHealthCheck{
 		HealthyThreshold:   nlbConfig.HealthCheck.HealthyThreshold,
 		UnhealthyThreshold: nlbConfig.HealthCheck.UnhealthyThreshold,
@@ -523,24 +553,27 @@ func (s *LoadBalancedWebService) convertNetworkLoadBalancer() (networkLoadBalanc
 	config := networkLoadBalancerConfig{
 		settings: &template.NetworkLoadBalancer{
 			PublicSubnetCIDRs: s.publicSubnetCIDRBlocks,
-			Listener: template.NetworkLoadBalancerListener{
-				Port:            aws.StringValue(port),
-				Protocol:        strings.ToUpper(aws.StringValue(protocol)),
-				TargetContainer: targetContainer,
-				TargetPort:      targetPort,
-				SSLPolicy:       nlbConfig.SSLPolicy,
-				Aliases:         aliases,
-				HealthCheck:     hc,
-				Stickiness:      nlbConfig.Stickiness,
+			Listener: []template.NetworkLoadBalancerListener{
+				{
+					Port:            aws.StringValue(port),
+					Protocol:        strings.ToUpper(aws.StringValue(protocol)),
+					TargetContainer: targetContainer,
+					TargetPort:      targetPort,
+					SSLPolicy:       nlbConfig.SSLPolicy,
+					Aliases:         aliases,
+					HealthCheck:     hc,
+					Stickiness:      nlbConfig.Stickiness,
+				},
 			},
-			MainContainerPort: s.containerPort(),
+			MainContainerPort:   s.containerPort(),
+			UniqueAliases:       uniqueAliases,
+			CertificateRequired: certRequired,
 		},
 	}
 
 	if s.dnsDelegationEnabled {
 		dnsDelegationRole, dnsName := convertAppInformation(s.appInfo)
 		config.appDNSName = dnsName
-		//fmt.Println("printing ")
 		config.appDNSDelegationRole = dnsDelegationRole
 	}
 	return config, nil
@@ -551,13 +584,16 @@ func (s *LoadBalancedWebService) convertApplicationLoadBalancer() (applicationLo
 	if albConfig.IsEmpty() {
 		return applicationLoadBalancerConfig{}, nil
 	}
-	var aliases []string
+	var aliases, uniqueAliases []string
 	var err error
+	uniqueAliasMap := make(map[string]bool)
+
 	if s.httpsEnabled {
 		aliases, err = convertAlias(s.manifest.RoutingRule.Alias)
 		if err != nil {
 			return applicationLoadBalancerConfig{}, err
 		}
+		uniqueAliases = append(uniqueAliases, uniqeAliasesForARecords(aliases, uniqueAliasMap)...)
 	}
 
 	aliasesFor, err := convertHostedZone(s.manifest.RoutingRule.RoutingRuleConfiguration)
@@ -578,25 +614,42 @@ func (s *LoadBalancedWebService) convertApplicationLoadBalancer() (applicationLo
 
 	hc := convertHTTPHealthCheck(&albConfig.HealthCheck)
 	stickiness := aws.String(strconv.FormatBool(aws.BoolValue(s.manifest.RoutingRule.Stickiness)))
+
 	config := applicationLoadBalancerConfig{
 		settings: &template.ApplicationLoadBalancer{
-			Listener: []template.ApplicationLoadBalancerListener{
+			Listener: []template.ApplicationLoadBalancerRoutineRule{
 				{
-					Protocol:          "TCP",
-					Path:              aws.StringValue(albConfig.Path),
-					TargetContainer:   aws.StringValue(targetContainer),
-					TargetPort:        aws.StringValue(targetPort),
-					Aliases:           aliases,
-					HostedZoneAliases: aliasesFor,
-					HTTPHealthCheck:   hc,
-					Stickiness:        aws.StringValue(stickiness),
-					AllowedSourceIps:  allowedSourceIPs,
+					Protocol:         "TCP",
+					Path:             aws.StringValue(albConfig.Path),
+					TargetContainer:  aws.StringValue(targetContainer),
+					TargetPort:       aws.StringValue(targetPort),
+					Aliases:          aliases,
+					HTTPHealthCheck:  hc,
+					Stickiness:       aws.StringValue(stickiness),
+					AllowedSourceIps: allowedSourceIPs,
 				},
 			},
+
+			UniqueAliases:     uniqueAliases,
+			HostedZoneAliases: aliasesFor,
 			MainContainerPort: s.containerPort(),
 		},
 	}
+
+	//TODO: @pbhingre code for additional rules comes here
+
 	return config, nil
+}
+
+func uniqeAliasesForARecords(aliases []string, uniqueMap map[string]bool) []string {
+	list := []string{}
+	for _, entry := range aliases {
+		if _, value := uniqueMap[entry]; !value {
+			uniqueMap[entry] = true
+			list = append(list, entry)
+		}
+	}
+	return list
 }
 
 func (s *BackendService) convertApplicationLoadBalancer() (applicationLoadBalancerConfig, error) {
@@ -605,12 +658,15 @@ func (s *BackendService) convertApplicationLoadBalancer() (applicationLoadBalanc
 		return applicationLoadBalancerConfig{}, nil
 	}
 
-	var aliases []string
+	var aliases, uniqueAliases []string
 	var err error
+	uniqueAliasMap := make(map[string]bool)
 	if s.httpsEnabled {
-		if aliases, err = convertAlias(s.manifest.RoutingRule.Alias); err != nil {
+		aliases, err = convertAlias(s.manifest.RoutingRule.Alias)
+		if err != nil {
 			return applicationLoadBalancerConfig{}, err
 		}
+		uniqueAliases = append(uniqueAliases, uniqeAliasesForARecords(aliases, uniqueAliasMap)...)
 	}
 
 	hostedZoneAliases, err := convertHostedZone(s.manifest.RoutingRule)
@@ -633,20 +689,21 @@ func (s *BackendService) convertApplicationLoadBalancer() (applicationLoadBalanc
 	stickiness := aws.String(strconv.FormatBool(aws.BoolValue(s.manifest.RoutingRule.Stickiness)))
 	config := applicationLoadBalancerConfig{
 		settings: &template.ApplicationLoadBalancer{
-			Listener: []template.ApplicationLoadBalancerListener{
+			Listener: []template.ApplicationLoadBalancerRoutineRule{
 				{
-					Protocol:          "TCP",
-					Path:              aws.StringValue(albConfig.Path),
-					TargetContainer:   aws.StringValue(targetContainer),
-					TargetPort:        aws.StringValue(targetPort),
-					Aliases:           aliases,
-					HostedZoneAliases: hostedZoneAliases,
-					HTTPHealthCheck:   hc,
-					AllowedSourceIps:  allowedSourceIPs,
-					Stickiness:        aws.StringValue(stickiness),
+					Protocol:         "TCP",
+					Path:             aws.StringValue(albConfig.Path),
+					TargetContainer:  aws.StringValue(targetContainer),
+					TargetPort:       aws.StringValue(targetPort),
+					Aliases:          aliases,
+					HTTPHealthCheck:  hc,
+					AllowedSourceIps: allowedSourceIPs,
+					Stickiness:       aws.StringValue(stickiness),
 				},
 			},
 			MainContainerPort: s.containerPort(),
+			UniqueAliases:     uniqueAliases,
+			HostedZoneAliases: hostedZoneAliases,
 		},
 	}
 	return config, nil

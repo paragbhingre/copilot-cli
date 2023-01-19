@@ -294,7 +294,7 @@ Resources: # If a bucket URL is specified, that means the template exists.
     DependsOn:
       - HTTPListenerRuleWithDomain
       - HTTPSListenerRule
-      - NLBListener
+      - NLBListenerFor81
     Properties:
       PlatformVersion: LATEST
       Cluster:
@@ -328,14 +328,16 @@ Resources: # If a bucket URL is specified, that means the template exists.
       LoadBalancers:
         - ContainerName: fe
           ContainerPort: 80
-          TargetGroupArn: TargetGroup
+          TargetGroupArn: TargetGroupDefaultPath
         - ContainerName: fe
           ContainerPort: 81
-          TargetGroupArn: !Ref NLBTargetGroup
+          TargetGroupArn: !Ref NLBTargetGroupFor81
       ServiceRegistries:
         - RegistryArn: !GetAtt DiscoveryService.Arn
-          Port: !Ref TargetPort
-  TargetGroup:
+          Port: 80
+        - RegistryArn: !GetAtt DiscoveryService.Arn
+          Port: 81
+  TargetGroupDefaultPath:
     Metadata:
       'aws:copilot:description': 'A target group to connect the load balancer to your service'
     Type: AWS::ElasticLoadBalancingV2::TargetGroup
@@ -412,7 +414,7 @@ Resources: # If a bucket URL is specified, that means the template exists.
     Type: Custom::RulePriorityFunction
     Properties:
       ServiceToken: !GetAtt RulePriorityFunction.Arn
-      RulePath: !Ref RulePath
+      RulePath: /
       ListenerArn: !GetAtt EnvControllerAction.HTTPSListenerArn
   
   HTTPRuleWithDomainPriorityAction:
@@ -421,7 +423,7 @@ Resources: # If a bucket URL is specified, that means the template exists.
     Type: Custom::RulePriorityFunction
     Properties:
       ServiceToken: !GetAtt RulePriorityFunction.Arn
-      RulePath: !Ref RulePath
+      RulePath: /
       ListenerArn: !GetAtt EnvControllerAction.HTTPListenerArn
   
   HTTPListenerRuleWithDomain:
@@ -448,11 +450,8 @@ Resources: # If a bucket URL is specified, that means the template exists.
                     - Fn::ImportValue: !Sub "${AppName}-${EnvName}-SubDomain"
         - Field: 'path-pattern'
           PathPatternConfig:
-            Values: !If
-              - IsDefaultRootPath
-              - - "/*"
-              - - !Sub "/${RulePath}"
-                - !Sub "/${RulePath}/*"
+            Values:
+              - /*
       ListenerArn: !GetAtt EnvControllerAction.HTTPListenerArn
       Priority: !GetAtt HTTPRuleWithDomainPriorityAction.Priority
   HTTPSListenerRule:
@@ -461,7 +460,7 @@ Resources: # If a bucket URL is specified, that means the template exists.
     Type: AWS::ElasticLoadBalancingV2::ListenerRule
     Properties:
       Actions:
-        - TargetGroupArn: !Ref TargetGroup
+        - TargetGroupArn: !Ref TargetGroupDefaultPath
           Type: forward
       Conditions:
         - Field: 'host-header'
@@ -473,11 +472,8 @@ Resources: # If a bucket URL is specified, that means the template exists.
                     - Fn::ImportValue: !Sub "${AppName}-${EnvName}-SubDomain"
         - Field: 'path-pattern'
           PathPatternConfig:
-            Values: !If
-              - IsDefaultRootPath
-              - - "/*"
-              - - !Sub "/${RulePath}"
-                - !Sub "/${RulePath}/*"
+            Values:
+              - /*
       ListenerArn: !GetAtt EnvControllerAction.HTTPSListenerArn
       Priority: !GetAtt HTTPSRulePriorityAction.Priority
   PublicNetworkLoadBalancer:
@@ -491,16 +487,16 @@ Resources: # If a bucket URL is specified, that means the template exists.
           - ","
           - Fn::ImportValue: !Sub '${AppName}-${EnvName}-PublicSubnets'
       Type: network
-  NLBListener:
+  NLBListenerFor81:
     Type: AWS::ElasticLoadBalancingV2::Listener
     Properties:
       DefaultActions:
-        - TargetGroupArn: !Ref NLBTargetGroup
+        - TargetGroupArn: !Ref NLBTargetGroupFor81
           Type: forward
       LoadBalancerArn: !Ref PublicNetworkLoadBalancer
-      Port: !Ref NLBPort
+      Port: 81
       Protocol: TCP
-  NLBTargetGroup:
+  NLBTargetGroupFor81:
     Metadata:
       'aws:copilot:description': 'A target group to connect the network load balancer to your service'
     Type: AWS::ElasticLoadBalancingV2::TargetGroup

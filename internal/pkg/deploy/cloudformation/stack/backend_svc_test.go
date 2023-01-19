@@ -485,7 +485,7 @@ Outputs:
 			Command:    []string{"here"},
 			ALBEnabled: true,
 			ALB: &template.ApplicationLoadBalancer{
-				Listener: []template.ApplicationLoadBalancerListener{
+				Listener: []template.ApplicationLoadBalancerRoutineRule{
 					{
 						Path:            "/albPath",
 						Protocol:        "TCP",
@@ -501,13 +501,13 @@ Outputs:
 							Interval:           aws.Int64(61),
 							Timeout:            aws.Int64(62),
 						},
-						HostedZoneAliases: template.AliasesForHostedZone{},
 						AllowedSourceIps: []string{
 							"10.0.1.0/24",
 						},
 						Stickiness: "true",
 					},
 				},
+				HostedZoneAliases: template.AliasesForHostedZone{},
 				MainContainerPort: "8080",
 			},
 			PortMappings: []*template.PortMapping{

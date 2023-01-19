@@ -238,7 +238,7 @@ func (tg HTTPTargetContainer) Exposed() bool {
 }
 
 // IsHTTPS returns true if the target container's port is 443.
-func (albl ApplicationLoadBalancerListener) IsHTTPS() bool {
+func (albl ApplicationLoadBalancerRoutineRule) IsHTTPS() bool {
 	return albl.TargetPort == "443"
 }
 
@@ -427,8 +427,8 @@ type NetworkLoadBalancerListener struct {
 	HealthCheck NLBHealthCheck
 }
 
-// ApplicationLoadBalancerListener holds configuration that's needed for an Application Load Balancer listener.
-type ApplicationLoadBalancerListener struct {
+// ApplicationLoadBalancerRoutingRule holds configuration that's needed for an Application Load Balancer listener.
+type ApplicationLoadBalancerRoutineRule struct {
 	// The path and protocol that the Application Load Balancer listens to.
 	Path     string
 	Protocol string
@@ -437,11 +437,10 @@ type ApplicationLoadBalancerListener struct {
 	TargetContainer string
 	TargetPort      string
 
-	Aliases           []string
-	AllowedSourceIps  []string
-	Stickiness        string
-	HTTPHealthCheck   HTTPHealthCheckOpts
-	HostedZoneAliases AliasesForHostedZone
+	Aliases          []string
+	AllowedSourceIps []string
+	Stickiness       string
+	HTTPHealthCheck  HTTPHealthCheckOpts
 }
 
 // NLBHealthCheck holds configuration for Network Load Balancer health check.
@@ -455,16 +454,20 @@ type NLBHealthCheck struct {
 
 // NetworkLoadBalancer holds configuration that's needed for a Network Load Balancer.
 type NetworkLoadBalancer struct {
-	PublicSubnetCIDRs []string
-	Listener          NetworkLoadBalancerListener
-	MainContainerPort string
+	PublicSubnetCIDRs   []string
+	Listener            []NetworkLoadBalancerListener
+	MainContainerPort   string
+	UniqueAliases       []string
+	CertificateRequired bool
 }
 
 // ApplicationLoadBalancer holds configuration that's needed for an Application Load Balancer.
 type ApplicationLoadBalancer struct {
 	PublicSubnetCIDRs []string
-	Listener          []ApplicationLoadBalancerListener
+	Listener          []ApplicationLoadBalancerRoutineRule
 	MainContainerPort string
+	UniqueAliases     []string
+	HostedZoneAliases AliasesForHostedZone
 }
 
 // ServiceConnect holds configuration for ECS Service Connect.
@@ -814,7 +817,7 @@ type WorkloadOpts struct {
 // or an empty string if it shouldn't be configured, defaulting to the
 // target protocol. (which is what happens, even if it isn't documented as such :))
 // https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-elasticloadbalancingv2-targetgroup.html#cfn-elasticloadbalancingv2-targetgroup-healthcheckprotocol
-func (albl ApplicationLoadBalancerListener) HealthCheckProtocol() string {
+func (albl ApplicationLoadBalancerRoutineRule) HealthCheckProtocol() string {
 	switch {
 	case albl.HTTPHealthCheck.Port == "443":
 		return "HTTPS"

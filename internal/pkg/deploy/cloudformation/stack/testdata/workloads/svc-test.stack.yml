@@ -452,11 +452,11 @@ Resources: # If a bucket URL is specified, that means the template exists.
       LoadBalancers:
         - ContainerName: fe
           ContainerPort: 4000
-          TargetGroupArn: TargetGroup
+          TargetGroupArn: TargetGroupDefaultPath
       ServiceRegistries:
         - RegistryArn: !GetAtt DiscoveryService.Arn
-          Port: !Ref TargetPort
-  TargetGroup:
+          Port: 4000
+  TargetGroupDefaultPath:
     Metadata:
       'aws:copilot:description': 'A target group to connect the load balancer to your service'
     Type: AWS::ElasticLoadBalancingV2::TargetGroup
@@ -515,7 +515,7 @@ Resources: # If a bucket URL is specified, that means the template exists.
     Type: Custom::RulePriorityFunction
     Properties:
       ServiceToken: !GetAtt RulePriorityFunction.Arn
-      RulePath: !Ref RulePath
+      RulePath: /
       ListenerArn: !GetAtt EnvControllerAction.HTTPSListenerArn
   
   HTTPRuleWithDomainPriorityAction:
@@ -524,7 +524,7 @@ Resources: # If a bucket URL is specified, that means the template exists.
     Type: Custom::RulePriorityFunction
     Properties:
       ServiceToken: !GetAtt RulePriorityFunction.Arn
-      RulePath: !Ref RulePath
+      RulePath: /
       ListenerArn: !GetAtt EnvControllerAction.HTTPListenerArn
   
   HTTPListenerRuleWithDomain:
@@ -548,10 +548,7 @@ Resources: # If a bucket URL is specified, that means the template exists.
         - Field: 'path-pattern'
           PathPatternConfig:
             Values: !If
-              - IsDefaultRootPath
-              - - "/*"
-              - - !Sub "/${RulePath}"
-                - !Sub "/${RulePath}/*"
+              - /*
       ListenerArn: !GetAtt EnvControllerAction.HTTPListenerArn
       Priority: !GetAtt HTTPRuleWithDomainPriorityAction.Priority
   HTTPSListenerRule:
@@ -560,7 +557,7 @@ Resources: # If a bucket URL is specified, that means the template exists.
     Type: AWS::ElasticLoadBalancingV2::ListenerRule
     Properties:
       Actions:
-        - TargetGroupArn: !Ref TargetGroup
+        - TargetGroupArn: !Ref TargetGroupDefaultPath
           Type: forward
       Conditions:
         - Field: 'host-header'
@@ -568,11 +565,8 @@ Resources: # If a bucket URL is specified, that means the template exists.
             Values: ["example.com"]
         - Field: 'path-pattern'
           PathPatternConfig:
-            Values: !If
-              - IsDefaultRootPath
-              - - "/*"
-              - - !Sub "/${RulePath}"
-                - !Sub "/${RulePath}/*"
+            Values:
+              - /*
       ListenerArn: !GetAtt EnvControllerAction.HTTPSListenerArn
       Priority: !GetAtt HTTPSRulePriorityAction.Priority
   AddonsStack:

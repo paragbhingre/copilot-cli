@@ -109,7 +109,9 @@ Resources:
     {{- end}}
     {{- end}}
     {{- if .NLB}}
-      - NLBListener
+    {{- range $listener := .NLB.Listener}}
+      - NLBListenerFor{{$listener.Port}}
+    {{- end}}
     {{- end}}
     Properties:
 {{include "service-base-properties" . | indent 6}}
@@ -122,18 +124,29 @@ Resources:
   {{- range $listener := .ALB.Listener}}
         - ContainerName: {{$listener.TargetContainer}}
           ContainerPort: {{$listener.TargetPort}}
-          TargetGroupArn: !Ref {{ if ne $listener.Path "/"}}TargetGroup{{logicalIDSafe $listener.Path}}{{ else }}TargetGroup{{ end}}
+          TargetGroupArn: !Ref {{ if eq $listener.Path "/"}}TargetGroupDefaultPath{{ else }}{{logicalIDSafe $listener.Path}}{{ end}}
   {{- end}}
   {{- end}}
   {{- if .NLB}}
-        - ContainerName: {{.NLB.Listener.TargetContainer}}
-          ContainerPort:  {{.NLB.Listener.TargetPort}}
-          TargetGroupArn: !Ref NLBTargetGroup
+  {{- range $listener := .NLB.Listener}}
+        - ContainerName: {{$listener.TargetContainer}}
+          ContainerPort:  {{$listener.TargetPort}}
+          TargetGroupArn: !Ref NLBTargetGroupFor{{$listener.Port}}
+  {{- end}}
   {{- end}}
       ServiceRegistries:
+      {{- if .ALB}}
+        {{- range $listener := .ALB.Listener}}
         - RegistryArn: !GetAtt DiscoveryService.Arn
-          Port: !Ref TargetPort
-
+          Port: {{$listener.TargetPort}}
+         {{- end }}
+      {{- end }}
+      {{- if .NLB}}
+        {{- range $listener := .NLB.Listener}}
+        - RegistryArn: !GetAtt DiscoveryService.Arn
+          Port: {{$listener.TargetPort}}
+        {{- end }}
+      {{- end }}
 {{- if .ALBEnabled}}
 {{include "alb" . | indent 2}}
 {{- end}}

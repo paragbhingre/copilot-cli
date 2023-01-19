@@ -294,7 +294,7 @@ Outputs:
 			Command:    []string{"world"},
 			ALBEnabled: true,
 			ALB: &template.ApplicationLoadBalancer{
-				Listener: []template.ApplicationLoadBalancerListener{
+				Listener: []template.ApplicationLoadBalancerRoutineRule{
 					{
 						Path:            "frontend",
 						Protocol:        "TCP",
@@ -309,15 +309,18 @@ Outputs:
 							Port:            "",
 							SuccessCodes:    "",
 						},
-						HostedZoneAliases: template.AliasesForHostedZone{
-							"mockHostedZone": {
-								"mockAlias",
-							},
-						},
 						Stickiness: "false",
 					},
 				},
 				MainContainerPort: "80",
+				HostedZoneAliases: template.AliasesForHostedZone{
+					"mockHostedZone": {
+						"mockAlias",
+					},
+				},
+				UniqueAliases: []string{
+					"mockAlias",
+				},
 			},
 			PortMappings: []*template.PortMapping{
 				{
