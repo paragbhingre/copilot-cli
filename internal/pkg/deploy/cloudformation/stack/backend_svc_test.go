@@ -101,7 +101,7 @@ func TestBackendService_Template(t *testing.T) {
 		_, err = svc.Template()
 
 		// THEN
-		require.EqualError(t, err, "exposed ports configuration for service api: cannot parse port mapping from 80/80/80")
+		require.EqualError(t, err, "parse exposed ports in service manifest api: cannot parse port mapping from 80/80/80")
 	})
 
 	t.Run("returns an error when failed to parse autoscaling template", func(t *testing.T) {
@@ -430,7 +430,6 @@ Outputs:
 			Sidecars: []*template.SidecarOpts{
 				{
 					Name: "envoy",
-					Port: aws.String("443"),
 					PortMappings: []*template.PortMapping{
 						{
 							Protocol:      "tcp",
