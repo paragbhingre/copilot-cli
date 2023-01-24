@@ -102,10 +102,14 @@ Resources:
     DependsOn:
     {{- if .ALBEnabled}}
     {{- if .HTTPSListener}}
-      - HTTPListenerRuleWithDomain
-      - HTTPSListenerRule
+    {{- range $listener := .ALB.Listener}}
+      - HTTPListenerRuleWithDomain{{logicalIDSafe $listener.Path}}
+      - HTTPSListenerRule{{logicalIDSafe $listener.Path}}
+    {{- end }}
     {{- else}}
-      - HTTPListenerRule
+    {{- range $listener := .ALB.Listener}}
+      - HTTPListenerRule{{logicalIDSafe $listener.Path}}
+    {{- end}}
     {{- end}}
     {{- end}}
     {{- if .NLB}}

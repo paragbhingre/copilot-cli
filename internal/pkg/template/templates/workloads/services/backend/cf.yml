@@ -96,11 +96,15 @@ Resources:
     DependsOn:
       - EnvControllerAction
       {{- if and .ALBEnabled .HTTPSListener}}
-      - HTTPListenerRuleWithDomain
-      - HTTPSListenerRule
-      {{ else if .ALBEnabled}}
-      - HTTPListenerRule
+      {{- range $listener := .ALB.Listener }}
+      - HTTPListenerRuleWithDomain{{logicalIDSafe $listener.Path}}
+      - HTTPSListenerRule{{logicalIDSafe $listener.Path}}
       {{- end}}
+      {{ else if .ALBEnabled}}
+      {{- range $listener := .ALB.Listener }}
+      - HTTPListenerRule{{logicalIDSafe $listener.Path}}
+      {{- end}}
+      {{- end }}
     Properties:
       {{- "\n"}}{{ include "service-base-properties" . | indent 6 }}
       ServiceRegistries: !If [ExposePort, [{RegistryArn: !GetAtt DiscoveryService.Arn, Port: !Ref TargetPort}], !Ref "AWS::NoValue"]

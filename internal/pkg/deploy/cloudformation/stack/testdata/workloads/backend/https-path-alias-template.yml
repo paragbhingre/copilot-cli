@@ -372,8 +372,8 @@ Resources:
     Type: AWS::ECS::Service
     DependsOn:
       - EnvControllerAction
-      - HTTPListenerRuleWithDomain
-      - HTTPSListenerRule
+      - HTTPListenerRuleWithDomainhttpspathaliaspath
+      - HTTPSListenerRulehttpspathaliaspath
     Properties:
       PlatformVersion: LATEST
       Cluster:
