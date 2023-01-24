@@ -220,7 +220,7 @@ Resources:
       Name: !Ref WorkloadName
       NamespaceId:
         Fn::ImportValue: !Sub '${AppName}-${EnvName}-ServiceDiscoveryNamespaceID'
-  TargetGrouphttpspathaliaspath:
+  TargetGroupForhttpspathaliaspath:
     Metadata:
       'aws:copilot:description': "A target group to connect the load balancer to your service"
     Type: AWS::ElasticLoadBalancingV2::TargetGroup
@@ -353,7 +353,7 @@ Resources:
     Type: AWS::ElasticLoadBalancingV2::ListenerRule
     Properties:
       Actions:
-        - TargetGroupArn: !Ref TargetGrouphttpspathaliaspath
+        - TargetGroupArn: !Ref TargetGroupForhttpspathaliaspath
           Type: forward
       Conditions:
         - Field: 'host-header'
@@ -405,7 +405,7 @@ Resources:
       LoadBalancers:
         - ContainerName: https-path-alias
           ContainerPort: 80
-          TargetGroupArn: !Ref TargetGrouphttpspathaliaspath
+          TargetGroupArn: !Ref TargetGroupForhttpspathaliaspath
   AddonsStack:
     Metadata:
       'aws:copilot:description': 'An Addons CloudFormation Stack for your additional AWS resources'

@@ -128,7 +128,7 @@ Resources:
   {{- range $listener := .ALB.Listener}}
         - ContainerName: {{$listener.TargetContainer}}
           ContainerPort: {{$listener.TargetPort}}
-          TargetGroupArn: !Ref {{ if eq $listener.Path "/"}}TargetGroupDefaultPath{{ else }}{{logicalIDSafe $listener.Path}}{{ end}}
+          TargetGroupArn: !Ref {{ if eq $listener.Path "/"}}TargetGroupForDefaultPath{{ else }}TargetGroupFor{{logicalIDSafe $listener.Path}}{{ end}}
   {{- end}}
   {{- end}}
   {{- if .NLB}}

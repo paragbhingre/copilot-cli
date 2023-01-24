@@ -116,7 +116,7 @@ Resources:
         {{- range $listener := .ALB.Listener}}
         - ContainerName: {{$listener.TargetContainer}}
           ContainerPort: {{$listener.TargetPort}}
-          TargetGroupArn: !Ref {{ if ne $listener.Path "/"}}TargetGroup{{logicalIDSafe $listener.Path}}{{ else }}TargetGroup{{ end}}
+          TargetGroupArn: !Ref {{ if eq $listener.Path "/"}}TargetGroupForDefaultPath{{ else }}TargetGroupFor{{logicalIDSafe $listener.Path}}{{ end}}
         {{- end }}
       {{- end}}
 

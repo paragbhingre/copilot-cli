@@ -435,8 +435,8 @@ Resources:
       LoadBalancers:
         - ContainerName: http-autoscaling
           ContainerPort: 8080
-          TargetGroupArn: !Ref TargetGrouphttpautoscalingpath
-  TargetGrouphttpautoscalingpath:
+          TargetGroupArn: !Ref TargetGroupForhttpautoscalingpath
+  TargetGroupForhttpautoscalingpath:
     Metadata:
       "aws:copilot:description": "A target group to connect the load balancer to your service"
     Type: AWS::ElasticLoadBalancingV2::TargetGroup
@@ -519,7 +519,7 @@ Resources:
     Type: AWS::ElasticLoadBalancingV2::ListenerRule
     Properties:
       Actions:
-        - TargetGroupArn: !Ref TargetGrouphttpautoscalingpath
+        - TargetGroupArn: !Ref TargetGroupForhttpautoscalingpath
           Type: forward
       Conditions:
         - Field: "host-header"

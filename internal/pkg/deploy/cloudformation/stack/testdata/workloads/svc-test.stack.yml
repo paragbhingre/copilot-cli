@@ -452,11 +452,11 @@ Resources: # If a bucket URL is specified, that means the template exists.
       LoadBalancers:
         - ContainerName: fe
           ContainerPort: 4000
-          TargetGroupArn: TargetGroupDefaultPath
+          TargetGroupArn: TargetGroupForDefaultPath
       ServiceRegistries:
         - RegistryArn: !GetAtt DiscoveryService.Arn
           Port: 4000
-  TargetGroupDefaultPath:
+  TargetGroupForDefaultPath:
     Metadata:
       'aws:copilot:description': 'A target group to connect the load balancer to your service'
     Type: AWS::ElasticLoadBalancingV2::TargetGroup
@@ -557,7 +557,7 @@ Resources: # If a bucket URL is specified, that means the template exists.
     Type: AWS::ElasticLoadBalancingV2::ListenerRule
     Properties:
       Actions:
-        - TargetGroupArn: !Ref TargetGroupDefaultPath
+        - TargetGroupArn: !Ref TargetGroupForDefaultPath
           Type: forward
       Conditions:
         - Field: 'host-header'

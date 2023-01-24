@@ -37,7 +37,7 @@ HTTPListenerRule{{logicalIDSafe $listener.Path}}:
   Type: AWS::ElasticLoadBalancingV2::ListenerRule
   Properties:
     Actions:
-      - TargetGroupArn: !Ref {{ if eq $listener.Path "/"}} TargetGroupDefaultPath {{ else }} TargetGroup{{ logicalIDSafe $listener.Path }} {{ end }}
+      - TargetGroupArn: !Ref {{ if eq $listener.Path "/"}} TargetGroupForDefaultPath {{ else }} TargetGroupFor{{ logicalIDSafe $listener.Path }} {{ end }}
         Type: forward
     Conditions:
       {{- if $listener.AllowedSourceIps}}
