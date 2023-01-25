@@ -582,16 +582,20 @@ func (s *LoadBalancedWebService) HTTPLoadBalancerTarget(exposedPorts []ExposedPo
 	targetContainer = s.Name
 	targetPort = aws.String(s.ContainerPort())
 
-	rrTarget := rrTargetContainer
-	if rrTarget != nil && *rrTarget != *targetContainer {
-		targetContainer = rrTarget
-		targetPort = s.Sidecars[aws.StringValue(targetContainer)].Port
+	if rrTargetContainer == nil && rrTargetPort == nil {
+		return
 	}
-	// Route load balancer traffic to the target_port if mentioned.
-	if container, port := httpLoadBalancerTarget(exposedPorts, rrTargetPort); port != nil {
+
+	if container, port := httpLoadBalancerTarget(exposedPorts, rrTargetPort); port == nil { // targetPort is nil
+		if *rrTargetContainer != *targetContainer {
+			targetContainer = rrTargetContainer
+			targetPort = s.Sidecars[aws.StringValue(targetContainer)].Port
+		}
+	} else { // targetContainer is nil
 		targetPort = port
-	} else if container != nil {
-		targetContainer = container
+		if container != nil {
+			targetContainer = container
+		}
 	}
 	return
 }
@@ -602,19 +606,74 @@ func (s *BackendService) HTTPLoadBalancerTarget(exposedPorts []ExposedPort, rrTa
 	targetContainer = s.Name
 	targetPort = aws.String(s.ContainerPort())
 
-	rrTarget := rrTargetContainer
-	if rrTarget != nil && *rrTarget != *targetContainer {
-		targetContainer = rrTarget
+	if rrTargetContainer == nil && rrTargetPort == nil {
+		return
+	}
+
+	if container, port := httpLoadBalancerTarget(exposedPorts, rrTargetPort); port == nil { // targetPort is nil
+		if *rrTargetContainer != *targetContainer {
+			targetContainer = rrTargetContainer
+			targetPort = s.Sidecars[aws.StringValue(targetContainer)].Port
+		}
+	} else { // targetContainer is nil
+		targetPort = port
+		if container != nil {
+			targetContainer = container
+		}
+	}
+	return
+}
+
+/*// NLBLoadBalancerTarget returns target container and target port for the ALB configuration.
+func (s *LoadBalancedWebService) NLBLoadBalancerTarget(exposedPorts []ExposedPort, nlbTargetContainer *string, nlbTargetPort *uint16) (targetContainer *string, targetPort *string) {
+	// Route load balancer traffic to main container by default.
+	targetContainer = s.Name
+	targetPort = aws.String(s.ContainerPort())
+
+	if nlbTargetContainer != nil && *nlbTargetContainer != *targetContainer {
+		targetContainer = nlbTargetContainer
 		targetPort = s.Sidecars[aws.StringValue(targetContainer)].Port
 	}
 	// Route load balancer traffic to the target_port if mentioned.
-	if container, port := httpLoadBalancerTarget(exposedPorts, rrTargetPort); port != nil {
+	if container, port := httpLoadBalancerTarget(exposedPorts, nlbTargetPort); port != nil {
 		targetPort = port
 	} else if container != nil {
 		targetContainer = container
 	}
 	return
-}
+
+	// Parse listener port and protocol.
+	port, protocol, err := ParsePortMapping(nlbConfig.Port)
+	if err != nil {
+		return networkLoadBalancerConfig{}, err
+	}
+	if protocol == nil {
+		protocol = aws.String(defaultNLBProtocol)
+	}
+
+	// Configure target container and port.
+	targetContainer := s.name
+	if nlbConfig.TargetContainer != nil {
+		targetContainer = aws.StringValue(nlbConfig.TargetContainer)
+	}
+
+	// By default, the target port is the same as listener port.
+	targetPort := aws.StringValue(port)
+	if targetContainer != s.name {
+		// If the target container is a sidecar container, the target port is the exposed sidecar port.
+		sideCarPort := s.manifest.Sidecars[targetContainer].Port // We validated that a sidecar container exposes a port if it is a target container.
+		port, _, err := manifest.ParsePortMapping(sideCarPort)
+		if err != nil {
+			return networkLoadBalancerConfig{}, err
+		}
+		targetPort = aws.StringValue(port)
+	}
+	// Finally, if a target port is explicitly specified, use that value.
+	if nlbConfig.TargetPort != nil {
+		targetPort = strconv.Itoa(aws.IntValue(nlbConfig.TargetPort))
+	}
+
+}*/
 
 func httpLoadBalancerTarget(exposedPorts []ExposedPort, rrTargetPort *uint16) (targetContainer *string, targetPort *string) {
 

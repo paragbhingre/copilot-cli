@@ -376,6 +376,12 @@ type networkLoadBalancerConfig struct {
 	appDNSName           *string
 }
 
+type nlbPortConfig struct {
+	Port            *string
+	targetContainer *string
+	targetPort      *int
+}
+
 func convertELBAccessLogsConfig(mft *manifest.Environment) *template.ELBAccessLogs {
 	elbAccessLogsArgs, isELBAccessLogsSet := mft.ELBAccessLogs()
 	if !isELBAccessLogsSet {
@@ -447,35 +453,17 @@ func (s *LoadBalancedWebService) convertNetworkLoadBalancer() (networkLoadBalanc
 		return networkLoadBalancerConfig{}, nil
 	}
 
-	// Parse listener port and protocol.
-	port, protocol, err := manifest.ParsePortMapping(nlbConfig.Port)
+	_, protocol, err := parseNLBPortMapping(nlbConfig.Port)
 	if err != nil {
 		return networkLoadBalancerConfig{}, err
 	}
-	if protocol == nil {
-		protocol = aws.String(defaultNLBProtocol)
-	}
-
-	// Configure target container and port.
-	targetContainer := s.name
-	if nlbConfig.TargetContainer != nil {
-		targetContainer = aws.StringValue(nlbConfig.TargetContainer)
-	}
-
-	// By default, the target port is the same as listener port.
-	targetPort := aws.StringValue(port)
-	if targetContainer != s.name {
-		// If the target container is a sidecar container, the target port is the exposed sidecar port.
-		sideCarPort := s.manifest.Sidecars[targetContainer].Port // We validated that a sidecar container exposes a port if it is a target container.
-		port, _, err := manifest.ParsePortMapping(sideCarPort)
-		if err != nil {
-			return networkLoadBalancerConfig{}, err
-		}
-		targetPort = aws.StringValue(port)
-	}
-	// Finally, if a target port is explicitly specified, use that value.
-	if nlbConfig.TargetPort != nil {
-		targetPort = strconv.Itoa(aws.IntValue(nlbConfig.TargetPort))
+	targetContainer, targetPort, err := s.convertNLBTarget(nlbPortConfig{
+		targetContainer: nlbConfig.TargetContainer,
+		targetPort:      nlbConfig.TargetPort,
+		Port:            nlbConfig.Port,
+	})
+	if err != nil {
+		return networkLoadBalancerConfig{}, err
 	}
 
 	aliases, err := convertAlias(nlbConfig.Aliases)
@@ -500,7 +488,7 @@ func (s *LoadBalancedWebService) convertNetworkLoadBalancer() (networkLoadBalanc
 		settings: &template.NetworkLoadBalancer{
 			PublicSubnetCIDRs: s.publicSubnetCIDRBlocks,
 			Listener: template.NetworkLoadBalancerListener{
-				Port:            aws.StringValue(port),
+				Port:            aws.StringValue(nlbConfig.Port),
 				Protocol:        strings.ToUpper(aws.StringValue(protocol)),
 				TargetContainer: targetContainer,
 				TargetPort:      targetPort,
@@ -519,6 +507,47 @@ func (s *LoadBalancedWebService) convertNetworkLoadBalancer() (networkLoadBalanc
 		config.appDNSDelegationRole = dnsDelegationRole
 	}
 	return config, nil
+}
+
+func parseNLBPortMapping(nlbPort *string) (port *string, protocol *string, err error) {
+	port, protocol, err = manifest.ParsePortMapping(nlbPort)
+	if err != nil {
+		return nil, nil, err
+	}
+	if protocol == nil {
+		protocol = aws.String(defaultNLBProtocol)
+	}
+	return
+}
+
+func (s *LoadBalancedWebService) convertNLBTarget(nlbConfig nlbPortConfig) (targetContainer string, targetPort string, err error) {
+	// Configure target container and port.
+	targetContainer = s.name
+	if nlbConfig.targetContainer != nil {
+		targetContainer = aws.StringValue(nlbConfig.targetContainer)
+	}
+
+	// Parse listener port and protocol.
+	port, _, err := parseNLBPortMapping(nlbConfig.Port)
+	if err != nil {
+		return "", "", err
+	}
+	// By default, the target port is the same as listener port.
+	targetPort = aws.StringValue(port)
+	if targetContainer != s.name {
+		// If the target container is a sidecar container, the target port is the exposed sidecar port.
+		sideCarPort := s.manifest.Sidecars[targetContainer].Port // We validated that a sidecar container exposes a port if it is a target container.
+		port, _, err := manifest.ParsePortMapping(sideCarPort)
+		if err != nil {
+			return "", "", err
+		}
+		targetPort = aws.StringValue(port)
+	}
+	// Finally, if a target port is explicitly specified, use that value.
+	if nlbConfig.targetPort != nil {
+		targetPort = strconv.Itoa(aws.IntValue(nlbConfig.targetPort))
+	}
+	return
 }
 
 func convertExecuteCommand(e *manifest.ExecuteCommand) *template.ExecuteCommandOpts {
