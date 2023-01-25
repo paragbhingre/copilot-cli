@@ -94,7 +94,7 @@ RulePriorityFunctionRole:
                 - elasticloadbalancing:DescribeRules
               Resource: "*"
 
-{{- if .HTTPSListener}}
+{{- if .ALB.HTTPSListener}}
 {{include "https-listener" .}}
 {{- else}}
 {{include "http-listener" .}}

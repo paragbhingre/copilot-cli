@@ -156,11 +156,10 @@ func convertContainerHealthCheck(hc manifest.ContainerHealthCheck) *template.Con
 	}
 }
 
-func convertHostedZone(m manifest.RoutingRuleConfiguration) (template.AliasesForHostedZone, error) {
+func convertHostedZone(alias manifest.Alias, defaultHostedZone *string) (template.AliasesForHostedZone, error) {
 	aliasesFor := make(map[string][]string)
-	defaultHostedZone := m.HostedZone
-	if len(m.Alias.AdvancedAliases) != 0 {
-		for _, alias := range m.Alias.AdvancedAliases {
+	if len(alias.AdvancedAliases) != 0 {
+		for _, alias := range alias.AdvancedAliases {
 			if alias.HostedZone != nil {
 				if isDuplicateAliasEntry(aliasesFor[*alias.HostedZone], aws.StringValue(alias.Alias)) {
 					continue
@@ -180,7 +179,7 @@ func convertHostedZone(m manifest.RoutingRuleConfiguration) (template.AliasesFor
 	if defaultHostedZone == nil {
 		return aliasesFor, nil
 	}
-	aliases, err := m.Alias.ToStringSlice()
+	aliases, err := alias.ToStringSlice()
 	if err != nil {
 		return nil, err
 	}
@@ -533,10 +532,6 @@ func (s *LoadBalancedWebService) convertNetworkLoadBalancer() (networkLoadBalanc
 		return networkLoadBalancerConfig{}, fmt.Errorf(`convert "nlb.alias" to string slice: %w`, err)
 	}
 
-	uniqueAliasMap := make(map[string]bool)
-	var uniqueAliases []string
-	uniqueAliases = append(uniqueAliases, uniqeAliasesForARecords(aliases, uniqueAliasMap)...)
-
 	hc := template.NLBHealthCheck{
 		HealthyThreshold:   nlbConfig.HealthCheck.HealthyThreshold,
 		UnhealthyThreshold: nlbConfig.HealthCheck.UnhealthyThreshold,
@@ -566,7 +561,6 @@ func (s *LoadBalancedWebService) convertNetworkLoadBalancer() (networkLoadBalanc
 				},
 			},
 			MainContainerPort:   s.containerPort(),
-			UniqueAliases:       uniqueAliases,
 			CertificateRequired: certRequired,
 		},
 	}
@@ -584,19 +578,16 @@ func (s *LoadBalancedWebService) convertApplicationLoadBalancer() (applicationLo
 	if albConfig.IsEmpty() {
 		return applicationLoadBalancerConfig{}, nil
 	}
-	var aliases, uniqueAliases []string
+	var aliases []string
 	var err error
-	uniqueAliasMap := make(map[string]bool)
-
 	if s.httpsEnabled {
 		aliases, err = convertAlias(s.manifest.RoutingRule.Alias)
 		if err != nil {
 			return applicationLoadBalancerConfig{}, err
 		}
-		uniqueAliases = append(uniqueAliases, uniqeAliasesForARecords(aliases, uniqueAliasMap)...)
 	}
 
-	aliasesFor, err := convertHostedZone(s.manifest.RoutingRule.RoutingRuleConfiguration)
+	aliasesFor, err := convertHostedZone(s.manifest.RoutingRule.RoutingRuleConfiguration.Alias, s.manifest.RoutingRule.RoutingRuleConfiguration.HostedZone)
 	if err != nil {
 		return applicationLoadBalancerConfig{}, err
 	}
@@ -612,8 +603,13 @@ func (s *LoadBalancedWebService) convertApplicationLoadBalancer() (applicationLo
 	}
 	targetContainer, targetPort := s.httpLoadBalancerTarget(exposedPorts)
 
-	hc := convertHTTPHealthCheck(&albConfig.HealthCheck)
-	stickiness := aws.String(strconv.FormatBool(aws.BoolValue(s.manifest.RoutingRule.Stickiness)))
+	httpHealthCheck := convertHTTPHealthCheck(&albConfig.HealthCheck)
+	stickiness := strconv.FormatBool(aws.BoolValue(s.manifest.RoutingRule.Stickiness))
+
+	httpRedirect := true
+	if s.manifest.RoutingRule.RedirectToHTTPS != nil {
+		httpRedirect = aws.BoolValue(s.manifest.RoutingRule.RedirectToHTTPS)
+	}
 
 	config := applicationLoadBalancerConfig{
 		settings: &template.ApplicationLoadBalancer{
@@ -624,13 +620,13 @@ func (s *LoadBalancedWebService) convertApplicationLoadBalancer() (applicationLo
 					TargetContainer:  aws.StringValue(targetContainer),
 					TargetPort:       aws.StringValue(targetPort),
 					Aliases:          aliases,
-					HTTPHealthCheck:  hc,
-					Stickiness:       aws.StringValue(stickiness),
+					HTTPHealthCheck:  httpHealthCheck,
+					Stickiness:       stickiness,
 					AllowedSourceIps: allowedSourceIPs,
 				},
 			},
-
-			UniqueAliases:     uniqueAliases,
+			HTTPRedirect:      httpRedirect,
+			HTTPSListener:     s.httpsEnabled,
 			HostedZoneAliases: aliasesFor,
 			MainContainerPort: s.containerPort(),
 		},
@@ -641,35 +637,19 @@ func (s *LoadBalancedWebService) convertApplicationLoadBalancer() (applicationLo
 	return config, nil
 }
 
-func uniqeAliasesForARecords(aliases []string, uniqueMap map[string]bool) []string {
-	list := []string{}
-	for _, entry := range aliases {
-		if _, value := uniqueMap[entry]; !value {
-			uniqueMap[entry] = true
-			list = append(list, entry)
-		}
-	}
-	return list
-}
-
 func (s *BackendService) convertApplicationLoadBalancer() (applicationLoadBalancerConfig, error) {
 	albConfig := s.manifest.RoutingRule
 	if albConfig.IsEmpty() {
 		return applicationLoadBalancerConfig{}, nil
 	}
 
-	var aliases, uniqueAliases []string
+	var aliases []string
 	var err error
-	uniqueAliasMap := make(map[string]bool)
 	if s.httpsEnabled {
 		aliases, err = convertAlias(s.manifest.RoutingRule.Alias)
-		if err != nil {
-			return applicationLoadBalancerConfig{}, err
-		}
-		uniqueAliases = append(uniqueAliases, uniqeAliasesForARecords(aliases, uniqueAliasMap)...)
 	}
 
-	hostedZoneAliases, err := convertHostedZone(s.manifest.RoutingRule)
+	hostedZoneAliases, err := convertHostedZone(s.manifest.RoutingRule.Alias, s.manifest.RoutingRule.HostedZone)
 	if err != nil {
 		return applicationLoadBalancerConfig{}, fmt.Errorf(`convert "http.alias" to string slice: %w`, err)
 	}
@@ -685,7 +665,7 @@ func (s *BackendService) convertApplicationLoadBalancer() (applicationLoadBalanc
 	}
 	targetContainer, targetPort := s.httpLoadBalancerTarget(exposedPorts)
 
-	hc := convertHTTPHealthCheck(&albConfig.HealthCheck)
+	httpHealthCheck := convertHTTPHealthCheck(&albConfig.HealthCheck)
 	stickiness := aws.String(strconv.FormatBool(aws.BoolValue(s.manifest.RoutingRule.Stickiness)))
 	config := applicationLoadBalancerConfig{
 		settings: &template.ApplicationLoadBalancer{
@@ -696,13 +676,14 @@ func (s *BackendService) convertApplicationLoadBalancer() (applicationLoadBalanc
 					TargetContainer:  aws.StringValue(targetContainer),
 					TargetPort:       aws.StringValue(targetPort),
 					Aliases:          aliases,
-					HTTPHealthCheck:  hc,
+					HTTPHealthCheck:  httpHealthCheck,
 					AllowedSourceIps: allowedSourceIPs,
 					Stickiness:       aws.StringValue(stickiness),
 				},
 			},
+			HTTPRedirect:      s.httpsEnabled,
+			HTTPSListener:     s.httpsEnabled,
 			MainContainerPort: s.containerPort(),
-			UniqueAliases:     uniqueAliases,
 			HostedZoneAliases: hostedZoneAliases,
 		},
 	}

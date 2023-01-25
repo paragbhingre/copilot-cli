@@ -92,7 +92,7 @@ NLBSecurityGroup:
     VpcId:
       Fn::ImportValue:
         !Sub "${AppName}-${EnvName}-VpcId"
-{{- if not .NLB.UniqueAliases}}
+{{- if not .NLB.GetUniqueAliases}}
 NLBDNSAlias:
   Metadata:
     'aws:copilot:description': 'The default alias record for the network load balancer'
@@ -133,7 +133,7 @@ NLBCustomDomainAction:
     ServiceName: !Ref WorkloadName
     RootDNSRole: {{ .AppDNSDelegationRole }}
     DomainName:  {{ .AppDNSName }}
-    Aliases: {{ if .NLB.UniqueAliases }} {{ fmtSlice .NLB.UniqueAliases }} {{ else }} [] {{ end }}
+    Aliases: {{ if .NLB.GetUniqueAliases }} {{ fmtSlice .NLB.GetUniqueAliases }} {{ else }} [] {{ end }}
 
 NLBCustomDomainFunction:
   Type: AWS::Lambda::Function
@@ -213,7 +213,7 @@ NLBCertValidatorAction:
     ServiceName: !Ref WorkloadName
     RootDNSRole: {{ .AppDNSDelegationRole }}
     DomainName:  {{ .AppDNSName }}
-    Aliases: {{ if .NLB.UniqueAliases }} {{ fmtSlice .NLB.UniqueAliases }} {{ else }} [] {{ end }}
+    Aliases: {{ if .NLB.GetUniqueAliases }} {{ fmtSlice .NLB.GetUniqueAliases }} {{ else }} [] {{ end }}
 
 NLBCertValidatorFunction:
   Type: AWS::Lambda::Function

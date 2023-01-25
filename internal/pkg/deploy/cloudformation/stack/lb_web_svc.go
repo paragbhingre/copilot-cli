@@ -168,35 +168,17 @@ func (s *LoadBalancedWebService) Template() (string, error) {
 	if err != nil {
 		return "", err
 	}
-
-	var aliases []string
-	if s.httpsEnabled {
-		if aliases, err = convertAlias(s.manifest.RoutingRule.Alias); err != nil {
-			return "", err
-		}
-	}
-
-	aliasesFor, err := convertHostedZone(s.manifest.RoutingRule.RoutingRuleConfiguration)
-	if err != nil {
-		return "", err
-	}
 	var deregistrationDelay *int64 = aws.Int64(60)
 	if s.manifest.RoutingRule.DeregistrationDelay != nil {
 		deregistrationDelay = aws.Int64(int64(s.manifest.RoutingRule.DeregistrationDelay.Seconds()))
 	}
-	var allowedSourceIPs []string
-	for _, ipNet := range s.manifest.RoutingRule.AllowedSourceIps {
-		allowedSourceIPs = append(allowedSourceIPs, string(ipNet))
-	}
 	nlbConfig, err := s.convertNetworkLoadBalancer()
-	albConfig, err := s.convertApplicationLoadBalancer()
-
 	if err != nil {
 		return "", err
 	}
-	httpRedirect := true
-	if s.manifest.RoutingRule.RedirectToHTTPS != nil {
-		httpRedirect = aws.BoolValue(s.manifest.RoutingRule.RedirectToHTTPS)
+	albConfig, err := s.convertApplicationLoadBalancer()
+	if err != nil {
+		return "", err
 	}
 	var scConfig *template.ServiceConnect
 	if s.manifest.Network.Connect.Enabled() {
@@ -223,9 +205,6 @@ func (s *LoadBalancedWebService) Template() (string, error) {
 
 		Variables:          convertEnvVars(s.manifest.TaskConfig.Variables),
 		Secrets:            convertSecrets(s.manifest.TaskConfig.Secrets),
-		Aliases:            aliases,
-		HTTPSListener:      s.httpsEnabled,
-		HTTPRedirect:       httpRedirect,
 		NestedStack:        addonsOutputs,
 		AddonsExtraParams:  addonsParams,
 		Sidecars:           sidecars,
@@ -241,10 +220,7 @@ func (s *LoadBalancedWebService) Template() (string, error) {
 			Name: aws.StringValue(targetContainer),
 		},
 		ServiceConnect:           scConfig,
-		HealthCheck:              convertContainerHealthCheck(s.manifest.ImageConfig.HealthCheck),
-		HTTPHealthCheck:          convertHTTPHealthCheck(&s.manifest.RoutingRule.HealthCheck),
 		DeregistrationDelay:      deregistrationDelay,
-		AllowedSourceIps:         allowedSourceIPs,
 		CustomResources:          crs,
 		Storage:                  convertStorageOpts(s.manifest.Name, s.manifest.Storage),
 		Network:                  convertNetworkConfig(s.manifest.Network),
@@ -262,10 +238,11 @@ func (s *LoadBalancedWebService) Template() (string, error) {
 		AppDNSName:               nlbConfig.appDNSName,
 		AppDNSDelegationRole:     nlbConfig.appDNSDelegationRole,
 		ALBEnabled:               !s.manifest.RoutingRule.Disabled(),
+		HTTPHealthCheck:          convertHTTPHealthCheck(&s.manifest.RoutingRule.HealthCheck),
+		HealthCheck:              convertContainerHealthCheck(s.manifest.ImageConfig.HealthCheck),
 		Observability: template.ObservabilityOpts{
 			Tracing: strings.ToUpper(aws.StringValue(s.manifest.Observability.Tracing)),
 		},
-		HostedZoneAliases:    aliasesFor,
 		PermissionsBoundary:  s.permBound,
 		EnvAddonsFeatureFlag: s.EnvAddonsFeatureFlag, // Feature flag for main container
 		PortMappings:         portMappings[s.name],

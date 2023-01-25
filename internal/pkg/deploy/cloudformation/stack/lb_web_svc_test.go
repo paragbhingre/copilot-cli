@@ -259,12 +259,6 @@ Outputs:
 				HealthCheckPath: "/",
 				GracePeriod:     60,
 			},
-			HostedZoneAliases: template.AliasesForHostedZone{
-				"mockHostedZone": []string{"mockAlias"},
-			},
-			Aliases:             []string{"mockAlias"},
-			HTTPSListener:       true,
-			HTTPRedirect:        true,
 			DeregistrationDelay: aws.Int64(60),
 			HTTPTargetContainer: template.HTTPTargetContainer{
 				Name: "frontend",
@@ -312,15 +306,14 @@ Outputs:
 						Stickiness: "false",
 					},
 				},
+				HTTPSListener:     true,
 				MainContainerPort: "80",
 				HostedZoneAliases: template.AliasesForHostedZone{
 					"mockHostedZone": {
 						"mockAlias",
 					},
 				},
-				UniqueAliases: []string{
-					"mockAlias",
-				},
+				HTTPRedirect: true,
 			},
 			PortMappings: []*template.PortMapping{
 				{

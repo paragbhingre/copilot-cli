@@ -1,4 +1,4 @@
-{{- if not .ALB.UniqueAliases}}
+{{- if not .ALB.GetUniqueAliases}}
 LoadBalancerDNSAlias:
   Metadata:
     'aws:copilot:description': 'The default alias record for the application load balancer'
@@ -74,7 +74,7 @@ HTTPRuleWithDomainPriorityAction{{logicalIDSafe $listener.Path}}:
 
 HTTPListenerRuleWithDomain{{logicalIDSafe $listener.Path}}:
   Metadata:
-    {{- if $.HTTPRedirect}}
+    {{- if $.ALB.HTTPRedirect}}
     'aws:copilot:description': 'An HTTP listener rule that redirects HTTP to HTTPS'
     {{- else}}
     'aws:copilot:description': 'An HTTP listener rule for forwarding HTTP traffic to your tasks'
@@ -82,7 +82,7 @@ HTTPListenerRuleWithDomain{{logicalIDSafe $listener.Path}}:
   Type: AWS::ElasticLoadBalancingV2::ListenerRule
   Properties:
     Actions:
-      {{- if $.HTTPRedirect}}
+      {{- if $.ALB.HTTPRedirect}}
       - Type: redirect
         RedirectConfig:
           Protocol: HTTPS

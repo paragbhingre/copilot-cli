@@ -269,6 +269,39 @@ func (h HTTPHealthCheckOpts) IsHTTPS() bool {
 	return h.Port == "443"
 }
 
+func (cfg *NetworkLoadBalancer) GetUniqueAliases() []string {
+	var uniqueAliases []string
+	uniqueAliasMap := make(map[string]bool)
+	for _, listener := range cfg.Listener {
+		if listener.Aliases != nil {
+			uniqueAliases = append(uniqueAliases, uniqeAliasesForARecords(listener.Aliases, uniqueAliasMap)...)
+		}
+	}
+	return uniqueAliases
+}
+
+func (cfg *ApplicationLoadBalancer) GetUniqueAliases() []string {
+	var uniqueAliases []string
+	uniqueAliasMap := make(map[string]bool)
+	for _, listener := range cfg.Listener {
+		if listener.Aliases != nil {
+			uniqueAliases = append(uniqueAliases, uniqeAliasesForARecords(listener.Aliases, uniqueAliasMap)...)
+		}
+	}
+	return uniqueAliases
+}
+
+func uniqeAliasesForARecords(aliases []string, uniqueMap map[string]bool) []string {
+	list := []string{}
+	for _, entry := range aliases {
+		if _, value := uniqueMap[entry]; !value {
+			uniqueMap[entry] = true
+			list = append(list, entry)
+		}
+	}
+	return list
+}
+
 type importable interface {
 	RequiresImport() bool
 }
@@ -457,7 +490,6 @@ type NetworkLoadBalancer struct {
 	PublicSubnetCIDRs   []string
 	Listener            []NetworkLoadBalancerListener
 	MainContainerPort   string
-	UniqueAliases       []string
 	CertificateRequired bool
 }
 
@@ -466,8 +498,10 @@ type ApplicationLoadBalancer struct {
 	PublicSubnetCIDRs []string
 	Listener          []ApplicationLoadBalancerRoutineRule
 	MainContainerPort string
-	UniqueAliases     []string
 	HostedZoneAliases AliasesForHostedZone
+	HTTPRedirect      bool
+	HTTPSListener     bool
+	ALBEnabled        bool
 }
 
 // ServiceConnect holds configuration for ECS Service Connect.
@@ -744,7 +778,6 @@ type WorkloadOpts struct {
 	// Additional options that are common between **all** workload templates.
 	Variables                map[string]Variable
 	Secrets                  map[string]Secret
-	Aliases                  []string
 	HTTPSListener            bool
 	Tags                     map[string]string        // Used by App Runner workloads to tag App Runner service resources
 	NestedStack              *WorkloadNestedStackOpts // Outputs from nested stacks such as the addons stack.
@@ -767,10 +800,8 @@ type WorkloadOpts struct {
 	ServiceDiscoveryEndpoint string
 	HTTPVersion              *string
 	ALBEnabled               bool
-	HostedZoneAliases        AliasesForHostedZone
 	CredentialsParameter     string
 	PermissionsBoundary      string
-	HTTPRedirect             bool
 
 	// Additional options for service templates.
 	WorkloadType            string
@@ -778,7 +809,6 @@ type WorkloadOpts struct {
 	HTTPTargetContainer     HTTPTargetContainer
 	HTTPHealthCheck         HTTPHealthCheckOpts
 	DeregistrationDelay     *int64
-	AllowedSourceIps        []string
 	NLB                     *NetworkLoadBalancer
 	ALB                     *ApplicationLoadBalancer
 	DeploymentConfiguration DeploymentConfigurationOpts

@@ -95,7 +95,7 @@ Resources:
     Type: AWS::ECS::Service
     DependsOn:
       - EnvControllerAction
-      {{- if and .ALBEnabled .HTTPSListener}}
+      {{- if and .ALBEnabled .ALB.HTTPSListener}}
       {{- range $listener := .ALB.Listener }}
       - HTTPListenerRuleWithDomain{{logicalIDSafe $listener.Path}}
       - HTTPSListenerRule{{logicalIDSafe $listener.Path}}

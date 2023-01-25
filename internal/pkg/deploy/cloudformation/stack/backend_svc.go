@@ -123,23 +123,9 @@ func (s *BackendService) Template() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	var aliases []string
-	if s.httpsEnabled {
-		if aliases, err = convertAlias(s.manifest.RoutingRule.Alias); err != nil {
-			return "", err
-		}
-	}
-	hostedZoneAliases, err := convertHostedZone(s.manifest.RoutingRule)
-	if err != nil {
-		return "", err
-	}
 	var deregistrationDelay *int64 = aws.Int64(60)
 	if s.manifest.RoutingRule.DeregistrationDelay != nil {
 		deregistrationDelay = aws.Int64(int64(s.manifest.RoutingRule.DeregistrationDelay.Seconds()))
-	}
-	var allowedSourceIPs []string
-	for _, ipNet := range s.manifest.RoutingRule.AllowedSourceIps {
-		allowedSourceIPs = append(allowedSourceIPs, string(ipNet))
 	}
 	var scConfig *template.ServiceConnect
 	if s.manifest.Network.Connect.Enabled() {
@@ -156,9 +142,6 @@ func (s *BackendService) Template() (string, error) {
 
 		Variables:          convertEnvVars(s.manifest.BackendServiceConfig.Variables),
 		Secrets:            convertSecrets(s.manifest.BackendServiceConfig.Secrets),
-		Aliases:            aliases,
-		HTTPSListener:      s.httpsEnabled,
-		HTTPRedirect:       s.httpsEnabled,
 		NestedStack:        addonsOutputs,
 		AddonsExtraParams:  addonsParams,
 		Sidecars:           sidecars,
@@ -173,9 +156,7 @@ func (s *BackendService) Template() (string, error) {
 			Name: aws.StringValue(targetContainer),
 		},
 		ServiceConnect:           scConfig,
-		HTTPHealthCheck:          convertHTTPHealthCheck(&s.manifest.RoutingRule.HealthCheck),
 		DeregistrationDelay:      deregistrationDelay,
-		AllowedSourceIps:         allowedSourceIPs,
 		CustomResources:          crs,
 		LogConfig:                convertLogging(s.manifest.Logging),
 		DockerLabels:             s.manifest.ImageConfig.Image.DockerLabels,
@@ -191,11 +172,11 @@ func (s *BackendService) Template() (string, error) {
 		Platform:                 convertPlatform(s.manifest.Platform),
 		HTTPVersion:              convertHTTPVersion(s.manifest.RoutingRule.ProtocolVersion),
 		ALBEnabled:               s.albEnabled,
+		HTTPHealthCheck:          convertHTTPHealthCheck(&s.manifest.RoutingRule.HealthCheck),
 		ALB:                      albConfig.settings,
 		Observability: template.ObservabilityOpts{
 			Tracing: strings.ToUpper(aws.StringValue(s.manifest.Observability.Tracing)),
 		},
-		HostedZoneAliases:   hostedZoneAliases,
 		PermissionsBoundary: s.permBound,
 		PortMappings:        portMappings[s.name],
 	})

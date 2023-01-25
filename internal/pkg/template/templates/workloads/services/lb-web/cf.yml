@@ -101,7 +101,7 @@ Resources:
     Type: AWS::ECS::Service
     DependsOn:
     {{- if .ALBEnabled}}
-    {{- if .HTTPSListener}}
+    {{- if .ALB.HTTPSListener}}
     {{- range $listener := .ALB.Listener}}
       - HTTPListenerRuleWithDomain{{logicalIDSafe $listener.Path}}
       - HTTPSListenerRule{{logicalIDSafe $listener.Path}}
