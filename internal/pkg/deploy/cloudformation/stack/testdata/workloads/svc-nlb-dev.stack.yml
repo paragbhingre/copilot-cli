@@ -334,9 +334,7 @@ Resources: # If a bucket URL is specified, that means the template exists.
           TargetGroupArn: !Ref NLBTargetGroupFor81
       ServiceRegistries:
         - RegistryArn: !GetAtt DiscoveryService.Arn
-          Port: 80
-        - RegistryArn: !GetAtt DiscoveryService.Arn
-          Port: 81
+          Port: !Ref TargetPort
   TargetGroupForDefaultPath:
     Metadata:
       'aws:copilot:description': 'A target group to connect the load balancer to your service'

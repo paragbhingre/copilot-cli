@@ -139,18 +139,8 @@ Resources:
   {{- end}}
   {{- end}}
       ServiceRegistries:
-      {{- if .ALB}}
-        {{- range $listener := .ALB.Listener}}
         - RegistryArn: !GetAtt DiscoveryService.Arn
-          Port: {{$listener.TargetPort}}
-         {{- end }}
-      {{- end }}
-      {{- if .NLB}}
-        {{- range $listener := .NLB.Listener}}
-        - RegistryArn: !GetAtt DiscoveryService.Arn
-          Port: {{$listener.TargetPort}}
-        {{- end }}
-      {{- end }}
+          Port: !Ref TargetPort
 {{- if .ALBEnabled}}
 {{include "alb" . | indent 2}}
 {{- end}}

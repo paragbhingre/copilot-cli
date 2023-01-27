@@ -330,7 +330,7 @@ Resources: # If a bucket URL is specified, that means the template exists.
           TargetGroupArn: !Ref NLBTargetGroupFor443
       ServiceRegistries:
         - RegistryArn: !GetAtt DiscoveryService.Arn
-          Port: 443
+          Port: !Ref TargetPort
   PublicNetworkLoadBalancer:
     Metadata:
       'aws:copilot:description': 'A Network Load Balancer to distribute public traffic to your service'
