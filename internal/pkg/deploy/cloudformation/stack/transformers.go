@@ -40,7 +40,6 @@ const (
 	defaultIAM             = disabled
 	defaultReadOnly        = true
 	defaultWritePermission = false
-	defaultNLBProtocol     = manifest.TCP
 )
 
 // Supported capacityproviders for Fargate services
@@ -434,37 +433,15 @@ func (s *LoadBalancedWebService) convertNetworkLoadBalancer() (networkLoadBalanc
 		return networkLoadBalancerConfig{}, nil
 	}
 
-	// Parse listener port and protocol.
-	port, protocol, err := manifest.ParsePortMapping(nlbConfig.Port)
+	targetContainer, targetPort, err := s.manifest.NLBLoadBalancerTarget()
 	if err != nil {
 		return networkLoadBalancerConfig{}, err
 	}
-	if protocol == nil {
-		protocol = aws.String(defaultNLBProtocol)
+	// Parse listener port and protocol.
+	port, protocol, err := manifest.ParseNLBPortMapping(nlbConfig.Port)
+	if err != nil {
+		return networkLoadBalancerConfig{}, err
 	}
-
-	// Configure target container and port.
-	targetContainer := s.name
-	if nlbConfig.TargetContainer != nil {
-		targetContainer = aws.StringValue(nlbConfig.TargetContainer)
-	}
-
-	// By default, the target port is the same as listener port.
-	targetPort := aws.StringValue(port)
-	if targetContainer != s.name {
-		// If the target container is a sidecar container, the target port is the exposed sidecar port.
-		sideCarPort := s.manifest.Sidecars[targetContainer].Port // We validated that a sidecar container exposes a port if it is a target container.
-		port, _, err := manifest.ParsePortMapping(sideCarPort)
-		if err != nil {
-			return networkLoadBalancerConfig{}, err
-		}
-		targetPort = aws.StringValue(port)
-	}
-	// Finally, if a target port is explicitly specified, use that value.
-	if nlbConfig.TargetPort != nil {
-		targetPort = strconv.Itoa(aws.IntValue(nlbConfig.TargetPort))
-	}
-
 	aliases, err := convertAlias(nlbConfig.Aliases)
 	if err != nil {
 		return networkLoadBalancerConfig{}, fmt.Errorf(`convert "nlb.alias" to string slice: %w`, err)
@@ -489,8 +466,8 @@ func (s *LoadBalancedWebService) convertNetworkLoadBalancer() (networkLoadBalanc
 			Listener: template.NetworkLoadBalancerListener{
 				Port:            aws.StringValue(port),
 				Protocol:        strings.ToUpper(aws.StringValue(protocol)),
-				TargetContainer: targetContainer,
-				TargetPort:      targetPort,
+				TargetContainer: aws.StringValue(targetContainer),
+				TargetPort:      aws.StringValue(targetPort),
 				SSLPolicy:       nlbConfig.SSLPolicy,
 				Aliases:         aliases,
 				HealthCheck:     hc,
