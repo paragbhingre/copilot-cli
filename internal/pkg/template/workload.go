@@ -474,6 +474,7 @@ type ApplicationLoadBalancerRoutineRule struct {
 	AllowedSourceIps []string
 	Stickiness       string
 	HTTPHealthCheck  HTTPHealthCheckOpts
+	HTTPRedirect     bool
 }
 
 // NLBHealthCheck holds configuration for Network Load Balancer health check.
@@ -499,7 +500,6 @@ type ApplicationLoadBalancer struct {
 	Listener          []ApplicationLoadBalancerRoutineRule
 	MainContainerPort string
 	HostedZoneAliases AliasesForHostedZone
-	HTTPRedirect      bool
 	HTTPSListener     bool
 	ALBEnabled        bool
 }

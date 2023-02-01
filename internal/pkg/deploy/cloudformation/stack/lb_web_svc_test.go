@@ -193,7 +193,7 @@ Outputs:
 		mft.ImageConfig.HealthCheck = manifest.ContainerHealthCheck{
 			Retries: aws.Int(5),
 		}
-		mft.RoutingRule.Alias = manifest.Alias{AdvancedAliases: []manifest.AdvancedAlias{
+		mft.RoutingRule.PrimaryRoutingRule.Alias = manifest.Alias{AdvancedAliases: []manifest.AdvancedAlias{
 			{
 				Alias:      aws.String("mockAlias"),
 				HostedZone: aws.String("mockHostedZone"),
@@ -303,7 +303,8 @@ Outputs:
 							Port:            "",
 							SuccessCodes:    "",
 						},
-						Stickiness: "false",
+						Stickiness:   "false",
+						HTTPRedirect: true,
 					},
 				},
 				HTTPSListener:     true,
@@ -313,7 +314,6 @@ Outputs:
 						"mockAlias",
 					},
 				},
-				HTTPRedirect: true,
 			},
 			PortMappings: []*template.PortMapping{
 				{
@@ -417,7 +417,7 @@ Outputs:
 			Path: "frontend",
 			Port: 80,
 		})
-		mft.RoutingRule.TargetContainer = aws.String("envoy")
+		mft.RoutingRule.PrimaryRoutingRule.TargetContainer = aws.String("envoy")
 		mft.Sidecars = map[string]*manifest.SidecarConfig{
 			"envoy": {
 				Port: aws.String("443"),
@@ -609,7 +609,7 @@ func TestLoadBalancedWebService_Parameters(t *testing.T) {
 		"with sidecar container": {
 			httpsEnabled: true,
 			setupManifest: func(service *manifest.LoadBalancedWebService) {
-				service.RoutingRule.TargetContainer = aws.String("xray")
+				service.RoutingRule.PrimaryRoutingRule.TargetContainer = aws.String("xray")
 				service.Sidecars = map[string]*manifest.SidecarConfig{
 					"xray": {
 						Port: aws.String("5000"),
@@ -650,7 +650,7 @@ func TestLoadBalancedWebService_Parameters(t *testing.T) {
 		"Stickiness enabled": {
 			httpsEnabled: false,
 			setupManifest: func(service *manifest.LoadBalancedWebService) {
-				service.RoutingRule.Stickiness = aws.Bool(true)
+				service.RoutingRule.PrimaryRoutingRule.Stickiness = aws.Bool(true)
 			},
 			expectedParams: append(expectedParams, []*cloudformation.Parameter{
 				{

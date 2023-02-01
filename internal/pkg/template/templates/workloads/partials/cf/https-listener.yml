@@ -74,7 +74,7 @@ HTTPRuleWithDomainPriorityAction{{logicalIDSafe $listener.Path}}:
 
 HTTPListenerRuleWithDomain{{logicalIDSafe $listener.Path}}:
   Metadata:
-    {{- if $.ALB.HTTPRedirect}}
+    {{- if $listener.HTTPRedirect}}
     'aws:copilot:description': 'An HTTP listener rule that redirects HTTP to HTTPS'
     {{- else}}
     'aws:copilot:description': 'An HTTP listener rule for forwarding HTTP traffic to your tasks'
@@ -82,7 +82,7 @@ HTTPListenerRuleWithDomain{{logicalIDSafe $listener.Path}}:
   Type: AWS::ElasticLoadBalancingV2::ListenerRule
   Properties:
     Actions:
-      {{- if $.ALB.HTTPRedirect}}
+      {{- if $listener.HTTPRedirect}}
       - Type: redirect
         RedirectConfig:
           Protocol: HTTPS
@@ -92,7 +92,7 @@ HTTPListenerRuleWithDomain{{logicalIDSafe $listener.Path}}:
           Query: "#{query}"
           StatusCode: HTTP_301
       {{- else}}
-      - TargetGroupArn: !Ref {{ if eq $listener.Path "/"}} TargetGroupDefaultPath {{ else }}TargetGroup{{ logicalIDSafe $listener.Path }}{{ end }}
+      - TargetGroupArn: !Ref {{ if eq $listener.Path "/"}} TargetGroupForDefaultPath {{ else }}TargetGroup{{ logicalIDSafe $listener.Path }}{{ end }}
         Type: forward
       {{- end}}
     Conditions:

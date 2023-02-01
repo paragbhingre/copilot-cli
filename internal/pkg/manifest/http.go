@@ -49,6 +49,12 @@ func (r *RoutingRuleConfigOrBool) UnmarshalYAML(value *yaml.Node) error {
 
 // RoutingRuleConfiguration holds the path to route requests to the service.
 type RoutingRuleConfiguration struct {
+	PrimaryRoutingRule       AlbConfiguration   `yaml:",inline"`
+	TargetContainerCamelCase *string            `yaml:"targetContainer"` // "targetContainerCamelCase" for backwards compatibility
+	AdditionalRoutingRules   []AlbConfiguration `yaml:"additional_rules"`
+}
+
+type AlbConfiguration struct {
 	Path                *string                 `yaml:"path"`
 	ProtocolVersion     *string                 `yaml:"version"`
 	HealthCheck         HealthCheckArgsOrString `yaml:"healthcheck"`
@@ -56,11 +62,10 @@ type RoutingRuleConfiguration struct {
 	Alias               Alias                   `yaml:"alias"`
 	DeregistrationDelay *time.Duration          `yaml:"deregistration_delay"`
 	// TargetContainer is the container load balancer routes traffic to.
-	TargetContainer          *string `yaml:"target_container"`
-	TargetPort               *uint16 `yaml:"target_port"`
-	TargetContainerCamelCase *string `yaml:"targetContainer"` // "targetContainerCamelCase" for backwards compatibility
-	AllowedSourceIps         []IPNet `yaml:"allowed_source_ips"`
-	HostedZone               *string `yaml:"hosted_zone"`
+	TargetContainer  *string `yaml:"target_container"`
+	TargetPort       *uint16 `yaml:"target_port"`
+	AllowedSourceIps []IPNet `yaml:"allowed_source_ips"`
+	HostedZone       *string `yaml:"hosted_zone"`
 	// RedirectToHTTPS configures a HTTP->HTTPS redirect. If nil, default to true.
 	RedirectToHTTPS *bool `yaml:"redirect_to_https"`
 }
@@ -68,17 +73,17 @@ type RoutingRuleConfiguration struct {
 // GetTargetContainer returns the correct target container value, if set.
 // Use this function instead of getting r.TargetContainer or r.TargetContainerCamelCase directly.
 func (r *RoutingRuleConfiguration) GetTargetContainer() *string {
-	if r.TargetContainer != nil {
-		return r.TargetContainer
+	if r.PrimaryRoutingRule.TargetContainer != nil {
+		return r.PrimaryRoutingRule.TargetContainer
 	}
 	return r.TargetContainerCamelCase
 }
 
 // IsEmpty returns true if RoutingRuleConfiguration has empty configuration.
 func (r *RoutingRuleConfiguration) IsEmpty() bool {
-	return r.Path == nil && r.ProtocolVersion == nil && r.HealthCheck.IsZero() && r.Stickiness == nil && r.Alias.IsEmpty() &&
-		r.DeregistrationDelay == nil && r.TargetContainer == nil && r.TargetContainerCamelCase == nil && r.AllowedSourceIps == nil &&
-		r.HostedZone == nil && r.RedirectToHTTPS == nil
+	return r.PrimaryRoutingRule.Path == nil && r.PrimaryRoutingRule.ProtocolVersion == nil && r.PrimaryRoutingRule.HealthCheck.IsZero() && r.PrimaryRoutingRule.Stickiness == nil && r.PrimaryRoutingRule.Alias.IsEmpty() &&
+		r.PrimaryRoutingRule.DeregistrationDelay == nil && r.PrimaryRoutingRule.TargetContainer == nil && r.TargetContainerCamelCase == nil && r.PrimaryRoutingRule.AllowedSourceIps == nil &&
+		r.PrimaryRoutingRule.HostedZone == nil && r.PrimaryRoutingRule.RedirectToHTTPS == nil
 }
 
 // IPNet represents an IP network string. For example: 10.1.0.0/16

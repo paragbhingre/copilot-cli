@@ -169,8 +169,8 @@ func (s *LoadBalancedWebService) Template() (string, error) {
 		return "", err
 	}
 	var deregistrationDelay *int64 = aws.Int64(60)
-	if s.manifest.RoutingRule.DeregistrationDelay != nil {
-		deregistrationDelay = aws.Int64(int64(s.manifest.RoutingRule.DeregistrationDelay.Seconds()))
+	if s.manifest.RoutingRule.PrimaryRoutingRule.DeregistrationDelay != nil {
+		deregistrationDelay = aws.Int64(int64(s.manifest.RoutingRule.PrimaryRoutingRule.DeregistrationDelay.Seconds()))
 	}
 	nlbConfig, err := s.convertNetworkLoadBalancer()
 	if err != nil {
@@ -184,7 +184,7 @@ func (s *LoadBalancedWebService) Template() (string, error) {
 	if s.manifest.Network.Connect.Enabled() {
 		scConfig = convertServiceConnect(s.manifest.Network.Connect)
 	}
-	targetContainer, targetContainerPort := s.httpLoadBalancerTarget(exposedPorts)
+	targetContainer, targetContainerPort := s.httpLoadBalancerTarget(exposedPorts, s.manifest.RoutingRule.GetTargetContainer(), s.manifest.RoutingRule.PrimaryRoutingRule.TargetPort)
 
 	// Set container-level feature flag.
 	logConfig := convertLogging(s.manifest.Logging)
@@ -231,14 +231,14 @@ func (s *LoadBalancedWebService) Template() (string, error) {
 		ServiceDiscoveryEndpoint: s.rc.ServiceDiscoveryEndpoint,
 		Publish:                  publishers,
 		Platform:                 convertPlatform(s.manifest.Platform),
-		HTTPVersion:              convertHTTPVersion(s.manifest.RoutingRule.ProtocolVersion),
+		HTTPVersion:              convertHTTPVersion(s.manifest.RoutingRule.PrimaryRoutingRule.ProtocolVersion),
 		NLB:                      nlbConfig.settings,
 		ALB:                      albConfig.settings,
 		DeploymentConfiguration:  convertDeploymentConfig(s.manifest.DeployConfig),
 		AppDNSName:               nlbConfig.appDNSName,
 		AppDNSDelegationRole:     nlbConfig.appDNSDelegationRole,
 		ALBEnabled:               !s.manifest.RoutingRule.Disabled(),
-		HTTPHealthCheck:          convertHTTPHealthCheck(&s.manifest.RoutingRule.HealthCheck),
+		HTTPHealthCheck:          convertHTTPHealthCheck(&s.manifest.RoutingRule.PrimaryRoutingRule.HealthCheck),
 		HealthCheck:              convertContainerHealthCheck(s.manifest.ImageConfig.HealthCheck),
 		Observability: template.ObservabilityOpts{
 			Tracing: strings.ToUpper(aws.StringValue(s.manifest.Observability.Tracing)),
@@ -254,26 +254,25 @@ func (s *LoadBalancedWebService) Template() (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("apply task definition overrides: %w", err)
 	}
-	//fmt.Println(string(overriddenTpl))
+	fmt.Println(string(overriddenTpl))
 	return string(overriddenTpl), nil
 }
 
-func (s *LoadBalancedWebService) httpLoadBalancerTarget(exposedPorts []manifest.ExposedPort) (targetContainer *string, targetPort *string) {
+func (s *LoadBalancedWebService) httpLoadBalancerTarget(exposedPorts []manifest.ExposedPort, rrTarget *string, rrTargetPort *uint16) (targetContainer *string, targetPort *string) {
 	// Route load balancer traffic to main container by default.
 	targetContainer = aws.String(s.name)
 	targetPort = aws.String(s.containerPort())
 
-	rrTarget := s.manifest.RoutingRule.GetTargetContainer()
 	if rrTarget != nil && *rrTarget != *targetContainer {
 		targetContainer = rrTarget
 		targetPort = s.manifest.Sidecars[aws.StringValue(targetContainer)].Port
 	}
 
 	// Route load balancer traffic to the target_port if mentioned.
-	if s.manifest.RoutingRule.TargetPort != nil {
-		port := aws.Uint16Value(s.manifest.RoutingRule.TargetPort)
-		targetPort = aws.String(strconv.FormatUint(uint64(port), 10))
-		if containerName := findContainerNameGivenPort(port, exposedPorts); containerName != "" {
+	if rrTargetPort != nil {
+		port := rrTargetPort
+		targetPort = aws.String(strconv.FormatUint(uint64(aws.Uint16Value(port)), 10))
+		if containerName := findContainerNameGivenPort(aws.Uint16Value(port), exposedPorts); containerName != "" {
 			targetContainer = aws.String(containerName)
 		}
 	}
@@ -295,7 +294,8 @@ func (s *LoadBalancedWebService) Parameters() ([]*cloudformation.Parameter, erro
 	if err != nil {
 		return nil, err
 	}
-	targetContainer, targetPort := s.httpLoadBalancerTarget(exposedPorts)
+	targetContainer, targetPort := s.httpLoadBalancerTarget(exposedPorts, s.manifest.RoutingRule.GetTargetContainer(), s.manifest.RoutingRule.PrimaryRoutingRule.TargetPort)
+
 	wkldParams = append(wkldParams, []*cloudformation.Parameter{
 		{
 			ParameterKey:   aws.String(WorkloadContainerPortParamKey),
@@ -323,7 +323,7 @@ func (s *LoadBalancedWebService) Parameters() ([]*cloudformation.Parameter, erro
 		wkldParams = append(wkldParams, []*cloudformation.Parameter{
 			{
 				ParameterKey:   aws.String(WorkloadRulePathParamKey),
-				ParameterValue: s.manifest.RoutingRule.Path,
+				ParameterValue: s.manifest.RoutingRule.PrimaryRoutingRule.Path,
 			},
 			{
 				ParameterKey:   aws.String(WorkloadHTTPSParamKey),
@@ -331,7 +331,7 @@ func (s *LoadBalancedWebService) Parameters() ([]*cloudformation.Parameter, erro
 			},
 			{
 				ParameterKey:   aws.String(WorkloadStickinessParamKey),
-				ParameterValue: aws.String(strconv.FormatBool(aws.BoolValue(s.manifest.RoutingRule.Stickiness))),
+				ParameterValue: aws.String(strconv.FormatBool(aws.BoolValue(s.manifest.RoutingRule.PrimaryRoutingRule.Stickiness))),
 			},
 		}...)
 	}

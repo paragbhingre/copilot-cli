@@ -124,8 +124,8 @@ func (s *BackendService) Template() (string, error) {
 		return "", err
 	}
 	var deregistrationDelay *int64 = aws.Int64(60)
-	if s.manifest.RoutingRule.DeregistrationDelay != nil {
-		deregistrationDelay = aws.Int64(int64(s.manifest.RoutingRule.DeregistrationDelay.Seconds()))
+	if s.manifest.RoutingRule.PrimaryRoutingRule.DeregistrationDelay != nil {
+		deregistrationDelay = aws.Int64(int64(s.manifest.RoutingRule.PrimaryRoutingRule.DeregistrationDelay.Seconds()))
 	}
 	var scConfig *template.ServiceConnect
 	if s.manifest.Network.Connect.Enabled() {
@@ -170,9 +170,9 @@ func (s *BackendService) Template() (string, error) {
 		ServiceDiscoveryEndpoint: s.rc.ServiceDiscoveryEndpoint,
 		Publish:                  publishers,
 		Platform:                 convertPlatform(s.manifest.Platform),
-		HTTPVersion:              convertHTTPVersion(s.manifest.RoutingRule.ProtocolVersion),
+		HTTPVersion:              convertHTTPVersion(s.manifest.RoutingRule.PrimaryRoutingRule.ProtocolVersion),
 		ALBEnabled:               s.albEnabled,
-		HTTPHealthCheck:          convertHTTPHealthCheck(&s.manifest.RoutingRule.HealthCheck),
+		HTTPHealthCheck:          convertHTTPHealthCheck(&s.manifest.RoutingRule.PrimaryRoutingRule.HealthCheck),
 		ALB:                      albConfig.settings,
 		Observability: template.ObservabilityOpts{
 			Tracing: strings.ToUpper(aws.StringValue(s.manifest.Observability.Tracing)),
@@ -202,8 +202,8 @@ func (s *BackendService) httpLoadBalancerTarget(exposedPorts []manifest.ExposedP
 	}
 
 	// Route load balancer traffic to the target_port if mentioned.
-	if s.manifest.RoutingRule.TargetPort != nil {
-		port := aws.Uint16Value(s.manifest.RoutingRule.TargetPort)
+	if s.manifest.RoutingRule.PrimaryRoutingRule.TargetPort != nil {
+		port := aws.Uint16Value(s.manifest.RoutingRule.PrimaryRoutingRule.TargetPort)
 		targetPort = aws.String(strconv.FormatUint(uint64(port), 10))
 		if containerName := findContainerNameGivenPort(port, exposedPorts); containerName != "" {
 			targetContainer = aws.String(containerName)
@@ -257,11 +257,11 @@ func (s *BackendService) Parameters() ([]*cloudformation.Parameter, error) {
 		params = append(params, []*cloudformation.Parameter{
 			{
 				ParameterKey:   aws.String(WorkloadRulePathParamKey),
-				ParameterValue: s.manifest.RoutingRule.Path,
+				ParameterValue: s.manifest.RoutingRule.PrimaryRoutingRule.Path,
 			},
 			{
 				ParameterKey:   aws.String(WorkloadStickinessParamKey),
-				ParameterValue: aws.String(strconv.FormatBool(aws.BoolValue(s.manifest.RoutingRule.Stickiness))),
+				ParameterValue: aws.String(strconv.FormatBool(aws.BoolValue(s.manifest.RoutingRule.PrimaryRoutingRule.Stickiness))),
 			},
 			{
 				ParameterKey:   aws.String(WorkloadHTTPSParamKey),

@@ -581,19 +581,19 @@ func (s *LoadBalancedWebService) convertApplicationLoadBalancer() (applicationLo
 	var aliases []string
 	var err error
 	if s.httpsEnabled {
-		aliases, err = convertAlias(s.manifest.RoutingRule.Alias)
+		aliases, err = convertAlias(s.manifest.RoutingRule.PrimaryRoutingRule.Alias)
 		if err != nil {
 			return applicationLoadBalancerConfig{}, err
 		}
 	}
 
-	aliasesFor, err := convertHostedZone(s.manifest.RoutingRule.RoutingRuleConfiguration.Alias, s.manifest.RoutingRule.RoutingRuleConfiguration.HostedZone)
+	aliasesFor, err := convertHostedZone(s.manifest.RoutingRule.RoutingRuleConfiguration.PrimaryRoutingRule.Alias, s.manifest.RoutingRule.RoutingRuleConfiguration.PrimaryRoutingRule.HostedZone)
 	if err != nil {
 		return applicationLoadBalancerConfig{}, err
 	}
 
 	var allowedSourceIPs []string
-	for _, ipNet := range s.manifest.RoutingRule.AllowedSourceIps {
+	for _, ipNet := range s.manifest.RoutingRule.PrimaryRoutingRule.AllowedSourceIps {
 		allowedSourceIPs = append(allowedSourceIPs, string(ipNet))
 	}
 
@@ -601,14 +601,14 @@ func (s *LoadBalancedWebService) convertApplicationLoadBalancer() (applicationLo
 	if err != nil {
 		return applicationLoadBalancerConfig{}, fmt.Errorf("exposed ports configuration for service %s: %w", s.name, err)
 	}
-	targetContainer, targetPort := s.httpLoadBalancerTarget(exposedPorts)
+	targetContainer, targetPort := s.httpLoadBalancerTarget(exposedPorts, albConfig.GetTargetContainer(), albConfig.PrimaryRoutingRule.TargetPort)
 
-	httpHealthCheck := convertHTTPHealthCheck(&albConfig.HealthCheck)
-	stickiness := strconv.FormatBool(aws.BoolValue(s.manifest.RoutingRule.Stickiness))
+	httpHealthCheck := convertHTTPHealthCheck(&albConfig.PrimaryRoutingRule.HealthCheck)
+	stickiness := strconv.FormatBool(aws.BoolValue(s.manifest.RoutingRule.PrimaryRoutingRule.Stickiness))
 
 	httpRedirect := true
-	if s.manifest.RoutingRule.RedirectToHTTPS != nil {
-		httpRedirect = aws.BoolValue(s.manifest.RoutingRule.RedirectToHTTPS)
+	if s.manifest.RoutingRule.PrimaryRoutingRule.RedirectToHTTPS != nil {
+		httpRedirect = aws.BoolValue(s.manifest.RoutingRule.PrimaryRoutingRule.RedirectToHTTPS)
 	}
 
 	config := applicationLoadBalancerConfig{
@@ -616,23 +616,69 @@ func (s *LoadBalancedWebService) convertApplicationLoadBalancer() (applicationLo
 			Listener: []template.ApplicationLoadBalancerRoutineRule{
 				{
 					Protocol:         "TCP",
-					Path:             aws.StringValue(albConfig.Path),
+					Path:             aws.StringValue(albConfig.PrimaryRoutingRule.Path),
 					TargetContainer:  aws.StringValue(targetContainer),
 					TargetPort:       aws.StringValue(targetPort),
 					Aliases:          aliases,
 					HTTPHealthCheck:  httpHealthCheck,
 					Stickiness:       stickiness,
 					AllowedSourceIps: allowedSourceIPs,
+					HTTPRedirect:     httpRedirect,
 				},
 			},
-			HTTPRedirect:      httpRedirect,
 			HTTPSListener:     s.httpsEnabled,
-			HostedZoneAliases: aliasesFor,
 			MainContainerPort: s.containerPort(),
 		},
 	}
 
-	//TODO: @pbhingre code for additional rules comes here
+	for _, additionalRule := range albConfig.AdditionalRoutingRules {
+		var additionalRuleAliases []string
+		if s.httpsEnabled {
+			additionalRuleAliases, err = convertAlias(additionalRule.Alias)
+			if err != nil {
+				return applicationLoadBalancerConfig{}, err
+			}
+		}
+
+		additionalRuleAliasesFor, err := convertHostedZone(additionalRule.Alias, additionalRule.HostedZone)
+		if err != nil {
+			return applicationLoadBalancerConfig{}, err
+		}
+
+		for k, v := range additionalRuleAliasesFor {
+			aliasesFor[k] = append(aliasesFor[k], v...)
+		}
+
+		var additionalAllowedSourceIPs []string
+		for _, ipNet := range additionalRule.AllowedSourceIps {
+			additionalAllowedSourceIPs = append(additionalAllowedSourceIPs, string(ipNet))
+		}
+
+		targetContainer, targetPort = s.httpLoadBalancerTarget(exposedPorts, additionalRule.TargetContainer, additionalRule.TargetPort)
+
+		additionalHTTPHealthCheck := convertHTTPHealthCheck(&additionalRule.HealthCheck)
+		additionalRuleStickiness := strconv.FormatBool(aws.BoolValue(additionalRule.Stickiness))
+
+		httpRedirect = true
+		if additionalRule.RedirectToHTTPS != nil {
+			httpRedirect = aws.BoolValue(additionalRule.RedirectToHTTPS)
+		}
+
+		out := template.ApplicationLoadBalancerRoutineRule{
+			Protocol:         "TCP",
+			Path:             aws.StringValue(additionalRule.Path),
+			TargetContainer:  aws.StringValue(targetContainer),
+			TargetPort:       aws.StringValue(targetPort),
+			Aliases:          additionalRuleAliases,
+			HTTPHealthCheck:  additionalHTTPHealthCheck,
+			Stickiness:       additionalRuleStickiness,
+			AllowedSourceIps: additionalAllowedSourceIPs,
+			HTTPRedirect:     httpRedirect,
+		}
+
+		config.settings.Listener = append(config.settings.Listener, out)
+	}
+	config.settings.HostedZoneAliases = aliasesFor
 
 	return config, nil
 }
@@ -646,16 +692,16 @@ func (s *BackendService) convertApplicationLoadBalancer() (applicationLoadBalanc
 	var aliases []string
 	var err error
 	if s.httpsEnabled {
-		aliases, err = convertAlias(s.manifest.RoutingRule.Alias)
+		aliases, err = convertAlias(s.manifest.RoutingRule.PrimaryRoutingRule.Alias)
 	}
 
-	hostedZoneAliases, err := convertHostedZone(s.manifest.RoutingRule.Alias, s.manifest.RoutingRule.HostedZone)
+	hostedZoneAliases, err := convertHostedZone(s.manifest.RoutingRule.PrimaryRoutingRule.Alias, s.manifest.RoutingRule.PrimaryRoutingRule.HostedZone)
 	if err != nil {
 		return applicationLoadBalancerConfig{}, fmt.Errorf(`convert "http.alias" to string slice: %w`, err)
 	}
 
 	var allowedSourceIPs []string
-	for _, ipNet := range s.manifest.RoutingRule.AllowedSourceIps {
+	for _, ipNet := range s.manifest.RoutingRule.PrimaryRoutingRule.AllowedSourceIps {
 		allowedSourceIPs = append(allowedSourceIPs, string(ipNet))
 	}
 
@@ -664,29 +710,81 @@ func (s *BackendService) convertApplicationLoadBalancer() (applicationLoadBalanc
 		return applicationLoadBalancerConfig{}, fmt.Errorf("exposed ports configuration for service %s: %w", s.name, err)
 	}
 	targetContainer, targetPort := s.httpLoadBalancerTarget(exposedPorts)
-
-	httpHealthCheck := convertHTTPHealthCheck(&albConfig.HealthCheck)
-	stickiness := aws.String(strconv.FormatBool(aws.BoolValue(s.manifest.RoutingRule.Stickiness)))
+	httpRedirect := true
+	if s.manifest.RoutingRule.PrimaryRoutingRule.RedirectToHTTPS != nil {
+		httpRedirect = aws.BoolValue(s.manifest.RoutingRule.PrimaryRoutingRule.RedirectToHTTPS)
+	}
+	httpHealthCheck := convertHTTPHealthCheck(&albConfig.PrimaryRoutingRule.HealthCheck)
+	stickiness := aws.String(strconv.FormatBool(aws.BoolValue(s.manifest.RoutingRule.PrimaryRoutingRule.Stickiness)))
 	config := applicationLoadBalancerConfig{
 		settings: &template.ApplicationLoadBalancer{
 			Listener: []template.ApplicationLoadBalancerRoutineRule{
 				{
 					Protocol:         "TCP",
-					Path:             aws.StringValue(albConfig.Path),
+					Path:             aws.StringValue(albConfig.PrimaryRoutingRule.Path),
 					TargetContainer:  aws.StringValue(targetContainer),
 					TargetPort:       aws.StringValue(targetPort),
 					Aliases:          aliases,
 					HTTPHealthCheck:  httpHealthCheck,
 					AllowedSourceIps: allowedSourceIPs,
 					Stickiness:       aws.StringValue(stickiness),
+					HTTPRedirect:     httpRedirect,
 				},
 			},
-			HTTPRedirect:      s.httpsEnabled,
 			HTTPSListener:     s.httpsEnabled,
 			MainContainerPort: s.containerPort(),
 			HostedZoneAliases: hostedZoneAliases,
 		},
 	}
+
+	for _, additionalRule := range albConfig.AdditionalRoutingRules {
+		var additionalRuleAliases []string
+		if s.httpsEnabled {
+			additionalRuleAliases, err = convertAlias(additionalRule.Alias)
+			if err != nil {
+				return applicationLoadBalancerConfig{}, err
+			}
+		}
+
+		additionalRuleAliasesFor, err := convertHostedZone(additionalRule.Alias, additionalRule.HostedZone)
+		if err != nil {
+			return applicationLoadBalancerConfig{}, err
+		}
+
+		for k, v := range additionalRuleAliasesFor {
+			hostedZoneAliases[k] = append(hostedZoneAliases[k], v...)
+		}
+
+		var additionalAllowedSourceIPs []string
+		for _, ipNet := range additionalRule.AllowedSourceIps {
+			additionalAllowedSourceIPs = append(additionalAllowedSourceIPs, string(ipNet))
+		}
+
+		targetContainer, targetPort = s.httpLoadBalancerTarget(exposedPorts)
+
+		additionalHTTPHealthCheck := convertHTTPHealthCheck(&additionalRule.HealthCheck)
+		additionalRuleStickiness := strconv.FormatBool(aws.BoolValue(additionalRule.Stickiness))
+
+		httpRedirect = true
+		if additionalRule.RedirectToHTTPS != nil {
+			httpRedirect = aws.BoolValue(additionalRule.RedirectToHTTPS)
+		}
+
+		out := template.ApplicationLoadBalancerRoutineRule{
+			Protocol:         "TCP",
+			Path:             aws.StringValue(additionalRule.Path),
+			TargetContainer:  aws.StringValue(targetContainer),
+			TargetPort:       aws.StringValue(targetPort),
+			Aliases:          additionalRuleAliases,
+			HTTPHealthCheck:  additionalHTTPHealthCheck,
+			Stickiness:       additionalRuleStickiness,
+			AllowedSourceIps: additionalAllowedSourceIPs,
+			HTTPRedirect:     httpRedirect,
+		}
+
+		config.settings.Listener = append(config.settings.Listener, out)
+	}
+
 	return config, nil
 }
 

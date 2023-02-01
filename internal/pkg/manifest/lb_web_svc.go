@@ -86,9 +86,9 @@ func NewLoadBalancedWebService(props *LoadBalancedWebServiceProps) *LoadBalanced
 		svc.LoadBalancedWebServiceConfig.TaskConfig.Memory = aws.Int(MinWindowsTaskMemory)
 	}
 	if props.HTTPVersion != "" {
-		svc.RoutingRule.ProtocolVersion = &props.HTTPVersion
+		svc.RoutingRule.PrimaryRoutingRule.ProtocolVersion = &props.HTTPVersion
 	}
-	svc.RoutingRule.Path = aws.String(props.Path)
+	svc.RoutingRule.PrimaryRoutingRule.Path = aws.String(props.Path)
 	svc.parser = template.New()
 	for _, envName := range props.PrivateOnlyEnvironments {
 		svc.Environments[envName] = &LoadBalancedWebServiceConfig{
@@ -109,8 +109,10 @@ func newDefaultHTTPLoadBalancedWebService() *LoadBalancedWebService {
 	lbws := newDefaultLoadBalancedWebService()
 	lbws.RoutingRule = RoutingRuleConfigOrBool{
 		RoutingRuleConfiguration: RoutingRuleConfiguration{
-			HealthCheck: HealthCheckArgsOrString{
-				Union: BasicToUnion[string, HTTPHealthCheckArgs](DefaultHealthCheckPath),
+			PrimaryRoutingRule: AlbConfiguration{
+				HealthCheck: HealthCheckArgsOrString{
+					Union: BasicToUnion[string, HTTPHealthCheckArgs](DefaultHealthCheckPath),
+				},
 			},
 		},
 	}

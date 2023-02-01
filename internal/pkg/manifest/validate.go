@@ -113,6 +113,10 @@ func (l LoadBalancedWebService) validate() error {
 	return nil
 }
 
+func (cfg AlbConfiguration) validate() error {
+	return nil
+}
+
 func (d DeploymentConfiguration) validate() error {
 	if d.isEmpty() {
 		return nil
@@ -693,7 +697,7 @@ func (r RoutingRuleConfigOrBool) validate() error {
 	if r.Disabled() {
 		return nil
 	}
-	if r.Path == nil {
+	if r.PrimaryRoutingRule.Path == nil {
 		return &errFieldMustBeSpecified{
 			missingField: "path",
 		}
@@ -706,34 +710,34 @@ func (r RoutingRuleConfiguration) validate() error {
 	if r.IsEmpty() {
 		return nil
 	}
-	if err := r.HealthCheck.validate(); err != nil {
+	if err := r.PrimaryRoutingRule.HealthCheck.validate(); err != nil {
 		return fmt.Errorf(`validate "healthcheck": %w`, err)
 	}
-	if err := r.Alias.validate(); err != nil {
+	if err := r.PrimaryRoutingRule.Alias.validate(); err != nil {
 		return fmt.Errorf(`validate "alias": %w`, err)
 	}
-	if r.TargetContainer != nil && r.TargetContainerCamelCase != nil {
+	if r.PrimaryRoutingRule.TargetContainer != nil && r.TargetContainerCamelCase != nil {
 		return &errFieldMutualExclusive{
 			firstField:  "target_container",
 			secondField: "targetContainer",
 		}
 	}
-	for ind, ip := range r.AllowedSourceIps {
+	for ind, ip := range r.PrimaryRoutingRule.AllowedSourceIps {
 		if err := ip.validate(); err != nil {
 			return fmt.Errorf(`validate "allowed_source_ips[%d]": %w`, ind, err)
 		}
 	}
-	if r.ProtocolVersion != nil {
-		if !contains(strings.ToUpper(*r.ProtocolVersion), httpProtocolVersions) {
-			return fmt.Errorf(`"version" field value '%s' must be one of %s`, *r.ProtocolVersion, english.WordSeries(httpProtocolVersions, "or"))
+	if r.PrimaryRoutingRule.ProtocolVersion != nil {
+		if !contains(strings.ToUpper(*r.PrimaryRoutingRule.ProtocolVersion), httpProtocolVersions) {
+			return fmt.Errorf(`"version" field value '%s' must be one of %s`, *r.PrimaryRoutingRule.ProtocolVersion, english.WordSeries(httpProtocolVersions, "or"))
 		}
 	}
-	if r.Path == nil {
+	if r.PrimaryRoutingRule.Path == nil {
 		return &errFieldMustBeSpecified{
 			missingField: "path",
 		}
 	}
-	if r.HostedZone != nil && r.Alias.IsEmpty() {
+	if r.PrimaryRoutingRule.HostedZone != nil && r.PrimaryRoutingRule.Alias.IsEmpty() {
 		return &errFieldMustBeSpecified{
 			missingField:      "alias",
 			conditionalFields: []string{"hosted_zone"},
@@ -1849,23 +1853,23 @@ func populateALBPortsAndValidate(containerNameFor map[uint16]string, opts valida
 		return nil
 	}
 	alb := opts.alb
-	if alb.TargetPort == nil {
+	if alb.PrimaryRoutingRule.TargetPort == nil {
 		return nil
 	}
-	if exposed, ok := containerNameFor[aws.Uint16Value(alb.TargetPort)]; ok {
-		if alb.TargetContainer != nil && exposed != aws.StringValue(alb.TargetContainer) {
+	if exposed, ok := containerNameFor[aws.Uint16Value(alb.PrimaryRoutingRule.TargetPort)]; ok {
+		if alb.PrimaryRoutingRule.TargetContainer != nil && exposed != aws.StringValue(alb.PrimaryRoutingRule.TargetContainer) {
 			return &errContainersExposingSamePort{
-				firstContainer:  aws.StringValue(alb.TargetContainer),
+				firstContainer:  aws.StringValue(alb.PrimaryRoutingRule.TargetContainer),
 				secondContainer: exposed,
-				port:            aws.Uint16Value(alb.TargetPort),
+				port:            aws.Uint16Value(alb.PrimaryRoutingRule.TargetPort),
 			}
 		}
 	}
 	targetContainerName := opts.mainContainerName
-	if alb.TargetContainer != nil {
-		targetContainerName = aws.StringValue(alb.TargetContainer)
+	if alb.PrimaryRoutingRule.TargetContainer != nil {
+		targetContainerName = aws.StringValue(alb.PrimaryRoutingRule.TargetContainer)
 	}
-	containerNameFor[aws.Uint16Value(alb.TargetPort)] = targetContainerName
+	containerNameFor[aws.Uint16Value(alb.PrimaryRoutingRule.TargetPort)] = targetContainerName
 
 	return nil
 }

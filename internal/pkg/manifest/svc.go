@@ -478,21 +478,21 @@ func (cfg ImageWithHealthcheckAndOptionalPort) exposedPorts(workloadName string)
 // exportPorts returns any new ports that should be exposed given the application load balancer
 // configuration that's not part of the existing containerPorts.
 func (rr RoutingRuleConfiguration) exposedPorts(exposedPorts []ExposedPort, workloadName string) []ExposedPort {
-	if rr.TargetPort == nil {
+	if rr.PrimaryRoutingRule.TargetPort == nil {
 		return nil
 	}
 	targetContainer := workloadName
-	if rr.TargetContainer != nil {
-		targetContainer = aws.StringValue(rr.TargetContainer)
+	if rr.PrimaryRoutingRule.TargetContainer != nil {
+		targetContainer = aws.StringValue(rr.PrimaryRoutingRule.TargetContainer)
 	}
 	for _, exposedPort := range exposedPorts {
-		if aws.Uint16Value(rr.TargetPort) == exposedPort.Port {
+		if aws.Uint16Value(rr.PrimaryRoutingRule.TargetPort) == exposedPort.Port {
 			return nil
 		}
 	}
 	return []ExposedPort{
 		{
-			Port:          aws.Uint16Value(rr.TargetPort),
+			Port:          aws.Uint16Value(rr.PrimaryRoutingRule.TargetPort),
 			Protocol:      "tcp",
 			ContainerName: targetContainer,
 		},
