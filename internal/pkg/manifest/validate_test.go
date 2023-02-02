@@ -57,7 +57,7 @@ func TestLoadBalancedWebService_validate(t *testing.T) {
 					},
 				},
 			},
-			wantedErrorMsgPrefix: `validate "http": `,
+			wantedErrorMsgPrefix: `validate "http": validate primary routing rule; `,
 		},
 		"error if fail to validate sidecars": {
 			lbConfig: LoadBalancedWebService{
@@ -571,7 +571,7 @@ func TestBackendService_validate(t *testing.T) {
 					},
 				},
 			},
-			wantedErrorMsgPrefix: `validate "http": "path" must be specified`,
+			wantedErrorMsgPrefix: `validate "http": validate primary routing rule; "path" must be specified`,
 		},
 		"error if request scaling without http": {
 			config: BackendService{
@@ -1396,7 +1396,7 @@ func TestRoutingRule_validate(t *testing.T) {
 				},
 				TargetContainerCamelCase: aws.String("mockContainer"),
 			},
-			wantedError: fmt.Errorf(`must specify one, not both, of "target_container" and "targetContainer"`),
+			wantedError: fmt.Errorf(`validate primary routing rule; must specify one, not both, of "target_container" and "targetContainer"`),
 		},
 		"error if one of allowed_source_ips is not valid": {
 			RoutingRule: RoutingRuleConfiguration{
@@ -1408,7 +1408,7 @@ func TestRoutingRule_validate(t *testing.T) {
 					},
 				},
 			},
-			wantedErrorMsgPrefix: `validate "allowed_source_ips[1]": `,
+			wantedErrorMsgPrefix: `validate primary routing rule; validate "allowed_source_ips[1]": `,
 		},
 		"error if protocol version is not valid": {
 			RoutingRule: RoutingRuleConfiguration{
@@ -1416,7 +1416,7 @@ func TestRoutingRule_validate(t *testing.T) {
 					ProtocolVersion: aws.String("quic"),
 				},
 			},
-			wantedErrorMsgPrefix: `"version" field value 'quic' must be one of GRPC, HTTP1 or HTTP2`,
+			wantedErrorMsgPrefix: `validate primary routing rule; "version" field value 'quic' must be one of GRPC, HTTP1 or HTTP2`,
 		},
 		"error if path is missing": {
 			RoutingRule: RoutingRuleConfiguration{
@@ -1424,7 +1424,7 @@ func TestRoutingRule_validate(t *testing.T) {
 					ProtocolVersion: aws.String("GRPC"),
 				},
 			},
-			wantedErrorMsgPrefix: `"path" must be specified`,
+			wantedErrorMsgPrefix: `validate primary routing rule; "path" must be specified`,
 		},
 		"should not error if protocol version is not uppercase": {
 			RoutingRule: RoutingRuleConfiguration{
@@ -1441,7 +1441,7 @@ func TestRoutingRule_validate(t *testing.T) {
 					HostedZone: aws.String("ABCD1234"),
 				},
 			},
-			wantedErrorMsgPrefix: `"alias" must be specified if "hosted_zone" is specified`,
+			wantedErrorMsgPrefix: `validate primary routing rule; "alias" must be specified if "hosted_zone" is specified`,
 		},
 		"error if one of alias is not valid": {
 			RoutingRule: RoutingRuleConfiguration{
@@ -1456,12 +1456,177 @@ func TestRoutingRule_validate(t *testing.T) {
 					},
 				},
 			},
-			wantedErrorMsgPrefix: `validate "alias":`,
+			wantedErrorMsgPrefix: `validate primary routing rule; validate "alias":`,
 		},
 	}
 	for name, tc := range testCases {
 		t.Run(name, func(t *testing.T) {
 			gotErr := tc.RoutingRule.validate()
+
+			if tc.wantedError != nil {
+				require.EqualError(t, gotErr, tc.wantedError.Error())
+				return
+			}
+			if tc.wantedErrorMsgPrefix != "" {
+				require.Error(t, gotErr)
+				require.Contains(t, gotErr.Error(), tc.wantedErrorMsgPrefix)
+				return
+			}
+			require.NoError(t, gotErr)
+		})
+	}
+}
+
+func TestRoutingRuleConfigOrBool_validate(t *testing.T) {
+	testCases := map[string]struct {
+		RoutingRuleOrBool RoutingRuleConfigOrBool
+
+		wantedErrorMsgPrefix string
+		wantedError          error
+	}{
+		"does not error out if the path is specified": {
+			RoutingRuleOrBool: RoutingRuleConfigOrBool{
+				RoutingRuleConfiguration: RoutingRuleConfiguration{
+					PrimaryRoutingRule: AlbConfiguration{
+						Path: aws.String("/"),
+					},
+					AdditionalRoutingRules: []AlbConfiguration{
+						{
+							Path: aws.String("/additional"),
+						},
+					},
+				},
+			},
+			wantedError: nil,
+		},
+		"does error out if the path is not specified in the additional rule": {
+			RoutingRuleOrBool: RoutingRuleConfigOrBool{
+				RoutingRuleConfiguration: RoutingRuleConfiguration{
+					PrimaryRoutingRule: AlbConfiguration{
+						Path: aws.String("/"),
+					},
+					AdditionalRoutingRules: []AlbConfiguration{
+						{
+							TargetPort: aws.Uint16(8080),
+						},
+					},
+				},
+			},
+			wantedError: errors.New(`validate additional_rules[0]; "path" must be specified`),
+		},
+		"does error out if the path is not specified in the additional rule 2": {
+			RoutingRuleOrBool: RoutingRuleConfigOrBool{
+				RoutingRuleConfiguration: RoutingRuleConfiguration{
+					PrimaryRoutingRule: AlbConfiguration{
+						Path: aws.String("/"),
+					},
+					AdditionalRoutingRules: []AlbConfiguration{
+						{
+							Path:       aws.String("additional"),
+							TargetPort: aws.Uint16(8080),
+						},
+						{
+							TargetPort: aws.Uint16(8080),
+						},
+					},
+				},
+			},
+			wantedError: errors.New(`validate additional_rules[1]; "path" must be specified`),
+		},
+		"error if one of allowed_source_ips is not valid": {
+			RoutingRuleOrBool: RoutingRuleConfigOrBool{
+				RoutingRuleConfiguration: RoutingRuleConfiguration{
+					PrimaryRoutingRule: AlbConfiguration{
+						Path: aws.String("/"),
+					},
+					AdditionalRoutingRules: []AlbConfiguration{
+						{
+							Path:       aws.String("additional"),
+							TargetPort: aws.Uint16(8080),
+							AllowedSourceIps: []IPNet{
+								IPNet("10.1.0.0/24"),
+								IPNet("badIP"),
+								IPNet("10.1.1.0/24"),
+							},
+						},
+					},
+				},
+			},
+			wantedErrorMsgPrefix: `validate additional_rules[0]; validate "allowed_source_ips[1]": `,
+		},
+		"error if protocol version is not valid": {
+			RoutingRuleOrBool: RoutingRuleConfigOrBool{
+				RoutingRuleConfiguration: RoutingRuleConfiguration{
+					PrimaryRoutingRule: AlbConfiguration{
+						Path: aws.String("/"),
+					},
+					AdditionalRoutingRules: []AlbConfiguration{
+						{
+							Path:            aws.String("/"),
+							ProtocolVersion: aws.String("quic"),
+						},
+					},
+				},
+			},
+			wantedErrorMsgPrefix: `validate additional_rules[0]; "version" field value 'quic' must be one of GRPC, HTTP1 or HTTP2`,
+		},
+		"should not error if protocol version is not uppercase": {
+			RoutingRuleOrBool: RoutingRuleConfigOrBool{
+				RoutingRuleConfiguration: RoutingRuleConfiguration{
+					PrimaryRoutingRule: AlbConfiguration{
+						Path: aws.String("/"),
+					},
+					AdditionalRoutingRules: []AlbConfiguration{
+						{
+							Path:            stringP("/"),
+							ProtocolVersion: aws.String("gRPC"),
+						},
+					},
+				},
+			},
+		},
+		"error if hosted zone set without alias": {
+			RoutingRuleOrBool: RoutingRuleConfigOrBool{
+				RoutingRuleConfiguration: RoutingRuleConfiguration{
+					PrimaryRoutingRule: AlbConfiguration{
+						Path: aws.String("/"),
+					},
+					AdditionalRoutingRules: []AlbConfiguration{
+						{
+							Path:       stringP("/"),
+							HostedZone: aws.String("ABCD1234"),
+						},
+					},
+				},
+			},
+			wantedErrorMsgPrefix: `validate additional_rules[0]; "alias" must be specified if "hosted_zone" is specified`,
+		},
+		"error if one of alias is not valid": {
+			RoutingRuleOrBool: RoutingRuleConfigOrBool{
+				RoutingRuleConfiguration: RoutingRuleConfiguration{
+					PrimaryRoutingRule: AlbConfiguration{
+						Path: aws.String("/"),
+					},
+					AdditionalRoutingRules: []AlbConfiguration{
+						{
+							Path: stringP("/"),
+							Alias: Alias{
+								AdvancedAliases: []AdvancedAlias{
+									{
+										HostedZone: aws.String("mockHostedZone"),
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			wantedErrorMsgPrefix: `validate additional_rules[0]; validate "alias": "name" must be specified`,
+		},
+	}
+	for name, tc := range testCases {
+		t.Run(name, func(t *testing.T) {
+			gotErr := tc.RoutingRuleOrBool.validate()
 
 			if tc.wantedError != nil {
 				require.EqualError(t, gotErr, tc.wantedError.Error())
@@ -3673,6 +3838,139 @@ func TestValidateExposedPorts(t *testing.T) {
 				},
 			},
 			wanted: fmt.Errorf(`containers "nginx" and "foo" are exposing the same port 5001`),
+		},
+		"should return an error if primary and additional rules are trying to expose the same port of different containers": {
+			in: validateExposedPortsOpts{
+				mainContainerName: "mockMainContainer",
+				mainContainerPort: aws.Uint16(5000),
+				sidecarConfig: map[string]*SidecarConfig{
+					"foo": {
+						Port: aws.String("8080"),
+					},
+					"nginx": {
+						Port: aws.String("80"),
+					},
+				},
+				alb: &RoutingRuleConfiguration{
+					PrimaryRoutingRule: AlbConfiguration{
+						TargetPort:      aws.Uint16(5001),
+						TargetContainer: aws.String("foo"),
+					},
+					AdditionalRoutingRules: []AlbConfiguration{
+						{
+							Path:            stringP("additional"),
+							TargetPort:      aws.Uint16(5001),
+							TargetContainer: aws.String("nginx"),
+						},
+					},
+				},
+			},
+			wanted: fmt.Errorf(`containers "nginx" and "foo" are exposing the same port 5001`),
+		},
+		"should return an error if primary/additional rules are trying to expose the same port of main/sidecar container": {
+			in: validateExposedPortsOpts{
+				mainContainerName: "mockMainContainer",
+				mainContainerPort: aws.Uint16(5000),
+				sidecarConfig: map[string]*SidecarConfig{
+					"foo": {
+						Port: aws.String("8080"),
+					},
+					"nginx": {
+						Port: aws.String("80"),
+					},
+				},
+				alb: &RoutingRuleConfiguration{
+					PrimaryRoutingRule: AlbConfiguration{
+						TargetPort: aws.Uint16(5001),
+					},
+					AdditionalRoutingRules: []AlbConfiguration{
+						{
+							Path:            stringP("additional"),
+							TargetPort:      aws.Uint16(5001),
+							TargetContainer: aws.String("nginx"),
+						},
+					},
+				},
+			},
+			wanted: fmt.Errorf(`containers "nginx" and "mockMainContainer" are exposing the same port 5001`),
+		},
+		"should not error out when alb additional rule's target_port is same as that of sidecar container port but target_container is empty": {
+			in: validateExposedPortsOpts{
+				mainContainerName: "mockMainContainer",
+				mainContainerPort: aws.Uint16(8080),
+				sidecarConfig: map[string]*SidecarConfig{
+					"foo": {
+						Port: aws.String("80"),
+					},
+				},
+				alb: &RoutingRuleConfiguration{
+					PrimaryRoutingRule: AlbConfiguration{
+						Path: stringP("/"),
+					},
+					AdditionalRoutingRules: []AlbConfiguration{
+						{
+							Path:       stringP("additional"),
+							TargetPort: aws.Uint16(80),
+						},
+					},
+				},
+			},
+			wanted: nil,
+		},
+		"should not return an error if different ports of the main and sidecar contaienrs are being exposed through additional rules": {
+			in: validateExposedPortsOpts{
+				mainContainerName: "mockMainContainer",
+				mainContainerPort: aws.Uint16(8080),
+				sidecarConfig: map[string]*SidecarConfig{
+					"foo": {
+						Port: aws.String("80"),
+					},
+				},
+				alb: &RoutingRuleConfiguration{
+					PrimaryRoutingRule: AlbConfiguration{
+						Path: stringP("/"),
+					},
+					AdditionalRoutingRules: []AlbConfiguration{
+						{
+							Path:       stringP("additional"),
+							TargetPort: aws.Uint16(81),
+						},
+						{
+							Path:            stringP("additionalroute"),
+							TargetPort:      aws.Uint16(82),
+							TargetContainer: aws.String("foo"),
+						},
+					},
+				},
+			},
+			wanted: nil,
+		},
+		"should return an error if alb additional rule's target_port points to one sidecar container port and target_container points to another sidecar container": {
+			in: validateExposedPortsOpts{
+				mainContainerName: "mockMainContainer",
+				mainContainerPort: aws.Uint16(5000),
+				sidecarConfig: map[string]*SidecarConfig{
+					"foo": {
+						Port: aws.String("8080"),
+					},
+					"nginx": {
+						Port: aws.String("80"),
+					},
+				},
+				alb: &RoutingRuleConfiguration{
+					PrimaryRoutingRule: AlbConfiguration{
+						Path: stringP("/"),
+					},
+					AdditionalRoutingRules: []AlbConfiguration{
+						{
+							Path:            stringP("additional"),
+							TargetContainer: aws.String("nginx"),
+							TargetPort:      aws.Uint16(8080),
+						},
+					},
+				},
+			},
+			wanted: fmt.Errorf(`containers "nginx" and "foo" are exposing the same port 8080`),
 		},
 	}
 	for name, tc := range testCases {
