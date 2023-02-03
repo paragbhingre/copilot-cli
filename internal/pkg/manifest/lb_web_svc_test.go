@@ -1838,7 +1838,7 @@ func TestLoadBalancedWebService_ExposedPorts(t *testing.T) {
 				},
 			},
 		},
-		"expose new primary container port through alb target_port": {
+		"expose new sidecar container port through additional rule": {
 			mft: &LoadBalancedWebService{
 				Workload: Workload{
 					Name: aws.String("frontend"),
@@ -1852,8 +1852,16 @@ func TestLoadBalancedWebService_ExposedPorts(t *testing.T) {
 					RoutingRule: RoutingRuleConfigOrBool{
 						RoutingRuleConfiguration: RoutingRuleConfiguration{
 							PrimaryRoutingRule: AlbConfiguration{
-								Path:       aws.String("/"),
-								TargetPort: aws.Uint16(81),
+								Path:            aws.String("/"),
+								TargetContainer: aws.String("xray"),
+								TargetPort:      aws.Uint16(81),
+							},
+							AdditionalRoutingRules: []AlbConfiguration{
+								{
+									Path:            stringP("additional"),
+									TargetContainer: stringP("xray"),
+									TargetPort:      aws.Uint16(2001),
+								},
 							},
 						},
 					},
@@ -1874,11 +1882,16 @@ func TestLoadBalancedWebService_ExposedPorts(t *testing.T) {
 				},
 				{
 					Port:          81,
-					ContainerName: "frontend",
+					ContainerName: "xray",
 					Protocol:      "tcp",
 				},
 				{
 					Port:          2000,
+					ContainerName: "xray",
+					Protocol:      "tcp",
+				},
+				{
+					Port:          2001,
 					ContainerName: "xray",
 					Protocol:      "tcp",
 				},
@@ -1921,6 +1934,63 @@ func TestLoadBalancedWebService_ExposedPorts(t *testing.T) {
 				},
 				{
 					Port:          81,
+					ContainerName: "frontend",
+					Protocol:      "tcp",
+				},
+				{
+					Port:          2000,
+					ContainerName: "xray",
+					Protocol:      "tcp",
+				},
+			},
+		},
+		"expose new primary container port through alb additional rule": {
+			mft: &LoadBalancedWebService{
+				Workload: Workload{
+					Name: aws.String("frontend"),
+				},
+				LoadBalancedWebServiceConfig: LoadBalancedWebServiceConfig{
+					ImageConfig: ImageWithPortAndHealthcheck{
+						ImageWithPort: ImageWithPort{
+							Port: aws.Uint16(80),
+						},
+					},
+					RoutingRule: RoutingRuleConfigOrBool{
+						RoutingRuleConfiguration: RoutingRuleConfiguration{
+							PrimaryRoutingRule: AlbConfiguration{
+								Path:       aws.String("/"),
+								TargetPort: aws.Uint16(81),
+							},
+							AdditionalRoutingRules: []AlbConfiguration{
+								{
+									Path:       aws.String("additional"),
+									TargetPort: uint16P(82),
+								},
+							},
+						},
+					},
+					Sidecars: map[string]*SidecarConfig{
+						"xray": {
+							Port:       aws.String("2000"),
+							Image:      aws.String("123456789012.dkr.ecr.us-east-2.amazonaws.com/xray-daemon"),
+							CredsParam: aws.String("some arn"),
+						},
+					},
+				},
+			},
+			wantedExposedPorts: []ExposedPort{
+				{
+					Port:          80,
+					ContainerName: "frontend",
+					Protocol:      "tcp",
+				},
+				{
+					Port:          81,
+					ContainerName: "frontend",
+					Protocol:      "tcp",
+				},
+				{
+					Port:          82,
 					ContainerName: "frontend",
 					Protocol:      "tcp",
 				},
@@ -2013,6 +2083,53 @@ func TestLoadBalancedWebService_ExposedPorts(t *testing.T) {
 				},
 			},
 		},
+		"reference existing sidecar container port through alb additional rule's target_port": {
+			mft: &LoadBalancedWebService{
+				Workload: Workload{
+					Name: aws.String("frontend"),
+				},
+				LoadBalancedWebServiceConfig: LoadBalancedWebServiceConfig{
+					ImageConfig: ImageWithPortAndHealthcheck{
+						ImageWithPort: ImageWithPort{
+							Port: aws.Uint16(80),
+						},
+					},
+					RoutingRule: RoutingRuleConfigOrBool{
+						RoutingRuleConfiguration: RoutingRuleConfiguration{
+							PrimaryRoutingRule: AlbConfiguration{
+								Path:       aws.String("/"),
+								TargetPort: aws.Uint16(81),
+							},
+							AdditionalRoutingRules: []AlbConfiguration{
+								{
+									Path:       stringP("additional"),
+									TargetPort: aws.Uint16(81),
+								},
+							},
+						},
+					},
+					Sidecars: map[string]*SidecarConfig{
+						"xray": {
+							Port:       aws.String("81"),
+							Image:      aws.String("123456789012.dkr.ecr.us-east-2.amazonaws.com/xray-daemon"),
+							CredsParam: aws.String("some arn"),
+						},
+					},
+				},
+			},
+			wantedExposedPorts: []ExposedPort{
+				{
+					Port:          80,
+					ContainerName: "frontend",
+					Protocol:      "tcp",
+				},
+				{
+					Port:          81,
+					ContainerName: "xray",
+					Protocol:      "tcp",
+				},
+			},
+		},
 		"reference existing primary container port through alb target_port": {
 			mft: &LoadBalancedWebService{
 				Workload: Workload{
@@ -2029,6 +2146,53 @@ func TestLoadBalancedWebService_ExposedPorts(t *testing.T) {
 							PrimaryRoutingRule: AlbConfiguration{
 								Path:       aws.String("/"),
 								TargetPort: aws.Uint16(80),
+							},
+						},
+					},
+					Sidecars: map[string]*SidecarConfig{
+						"xray": {
+							Port:       aws.String("81"),
+							Image:      aws.String("123456789012.dkr.ecr.us-east-2.amazonaws.com/xray-daemon"),
+							CredsParam: aws.String("some arn"),
+						},
+					},
+				},
+			},
+			wantedExposedPorts: []ExposedPort{
+				{
+					Port:          80,
+					ContainerName: "frontend",
+					Protocol:      "tcp",
+				},
+				{
+					Port:          81,
+					ContainerName: "xray",
+					Protocol:      "tcp",
+				},
+			},
+		},
+		"reference existing primary container port through alb additional rule's target_port": {
+			mft: &LoadBalancedWebService{
+				Workload: Workload{
+					Name: aws.String("frontend"),
+				},
+				LoadBalancedWebServiceConfig: LoadBalancedWebServiceConfig{
+					ImageConfig: ImageWithPortAndHealthcheck{
+						ImageWithPort: ImageWithPort{
+							Port: aws.Uint16(80),
+						},
+					},
+					RoutingRule: RoutingRuleConfigOrBool{
+						RoutingRuleConfiguration: RoutingRuleConfiguration{
+							PrimaryRoutingRule: AlbConfiguration{
+								Path:       aws.String("/"),
+								TargetPort: aws.Uint16(80),
+							},
+							AdditionalRoutingRules: []AlbConfiguration{
+								{
+									Path:       stringP("additional"),
+									TargetPort: aws.Uint16(80),
+								},
 							},
 						},
 					},

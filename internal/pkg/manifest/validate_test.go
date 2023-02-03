@@ -175,6 +175,28 @@ func TestLoadBalancedWebService_validate(t *testing.T) {
 			},
 			wantedErrorMsgPrefix: `validate HTTP load balancer target: `,
 		},
+		"error if fail to validate HTTP load balancer target from additional rule": {
+			lbConfig: LoadBalancedWebService{
+				Workload: Workload{Name: aws.String("mockName")},
+				LoadBalancedWebServiceConfig: LoadBalancedWebServiceConfig{
+					ImageConfig: testImageConfig,
+					RoutingRule: RoutingRuleConfigOrBool{
+						RoutingRuleConfiguration: RoutingRuleConfiguration{
+							PrimaryRoutingRule: AlbConfiguration{
+								Path: stringP("/"),
+							},
+							AdditionalRoutingRules: []AlbConfiguration{
+								{
+									Path:            stringP("additional"),
+									TargetContainer: aws.String("foo"),
+								},
+							},
+						},
+					},
+				},
+			},
+			wantedErrorMsgPrefix: `validate HTTP load balancer target: `,
+		},
 		"error if fail to validate network load balancer target": {
 			lbConfig: LoadBalancedWebService{
 				Workload: Workload{Name: aws.String("mockName")},
@@ -573,6 +595,25 @@ func TestBackendService_validate(t *testing.T) {
 			},
 			wantedErrorMsgPrefix: `validate "http": validate primary routing rule; "path" must be specified`,
 		},
+		"error if fail to validate http additional rule": {
+			config: BackendService{
+				BackendServiceConfig: BackendServiceConfig{
+					ImageConfig: testImageConfig,
+					RoutingRule: RoutingRuleConfiguration{
+						PrimaryRoutingRule: AlbConfiguration{
+							Path:            stringP("/"),
+							ProtocolVersion: aws.String("GRPC"),
+						},
+						AdditionalRoutingRules: []AlbConfiguration{
+							{
+								ProtocolVersion: aws.String("GRPC"),
+							},
+						},
+					},
+				},
+			},
+			wantedErrorMsgPrefix: `validate "http": validate additional_rules[0]; "path" must be specified`,
+		},
 		"error if request scaling without http": {
 			config: BackendService{
 				BackendServiceConfig: BackendServiceConfig{
@@ -606,7 +647,7 @@ func TestBackendService_validate(t *testing.T) {
 			},
 			wantedErrorMsgPrefix: `validate "publish": `,
 		},
-		"error if target container not found": {
+		"error if target container does not not expose a port": {
 			config: BackendService{
 				BackendServiceConfig: BackendServiceConfig{
 					ImageConfig: testImageConfig,
@@ -622,6 +663,72 @@ func TestBackendService_validate(t *testing.T) {
 				},
 			},
 			wantedError: fmt.Errorf(`validate HTTP load balancer target: target container "api" doesn't expose a port`),
+		},
+		"error if target container mentioned in the primary routing rule does not exist": {
+			config: BackendService{
+				BackendServiceConfig: BackendServiceConfig{
+					ImageConfig: testImageConfig,
+					RoutingRule: RoutingRuleConfiguration{
+						PrimaryRoutingRule: AlbConfiguration{
+							TargetContainer: aws.String("foo"),
+							Path:            aws.String("/"),
+						},
+					},
+				},
+				Workload: Workload{
+					Name: aws.String("api"),
+				},
+			},
+			wantedError: fmt.Errorf(`validate HTTP load balancer target: target container "foo" doesn't exist`),
+		},
+		"error if target container mentioned in the additional routing rule does not exist": {
+			config: BackendService{
+				BackendServiceConfig: BackendServiceConfig{
+					ImageConfig: testImageConfig,
+					RoutingRule: RoutingRuleConfiguration{
+						PrimaryRoutingRule: AlbConfiguration{
+							Path: aws.String("/"),
+						},
+						AdditionalRoutingRules: []AlbConfiguration{
+							{
+								Path:            stringP("additional"),
+								TargetContainer: aws.String("foo"),
+							},
+						},
+					},
+				},
+				Workload: Workload{
+					Name: aws.String("api"),
+				},
+			},
+			wantedError: fmt.Errorf(`validate HTTP load balancer target: target container "foo" doesn't exist`),
+		},
+		"error if target container mentioned in the additional routing rule does not expose a port": {
+			config: BackendService{
+				BackendServiceConfig: BackendServiceConfig{
+					ImageConfig: testImageConfig,
+					RoutingRule: RoutingRuleConfiguration{
+						PrimaryRoutingRule: AlbConfiguration{
+							Path: aws.String("/"),
+						},
+						AdditionalRoutingRules: []AlbConfiguration{
+							{
+								Path:            stringP("additional"),
+								TargetContainer: aws.String("foo"),
+							},
+						},
+					},
+					Sidecars: map[string]*SidecarConfig{
+						"foo": {
+							Image: stringP("sampleImage"),
+						},
+					},
+				},
+				Workload: Workload{
+					Name: aws.String("api"),
+				},
+			},
+			wantedError: fmt.Errorf(`validate HTTP load balancer target: target container "foo" doesn't expose a port`),
 		},
 		"error if service connect is enabled without any port exposed": {
 			config: BackendService{

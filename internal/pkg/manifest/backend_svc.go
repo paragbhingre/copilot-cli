@@ -202,7 +202,7 @@ func (b *BackendService) ExposedPorts() ([]ExposedPort, error) {
 		}
 		exposedPorts = append(exposedPorts, out...)
 	}
-	exposedPorts = append(exposedPorts, b.RoutingRule.exposedPorts(exposedPorts, workloadName)...)
+	exposedPorts = append(exposedPorts, b.RoutingRule.PrimaryRoutingRule.exposedPorts(exposedPorts, workloadName)...)
 
 	return sortExposedPorts(exposedPorts), nil
 }

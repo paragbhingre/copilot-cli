@@ -255,7 +255,10 @@ func (lbws *LoadBalancedWebService) ExposedPorts() ([]ExposedPort, error) {
 		}
 		exposedPorts = append(exposedPorts, out...)
 	}
-	exposedPorts = append(exposedPorts, lbws.RoutingRule.exposedPorts(exposedPorts, workloadName)...)
+	exposedPorts = append(exposedPorts, lbws.RoutingRule.PrimaryRoutingRule.exposedPorts(exposedPorts, workloadName)...)
+	for _, additionalRule := range lbws.RoutingRule.AdditionalRoutingRules {
+		exposedPorts = append(exposedPorts, additionalRule.exposedPorts(exposedPorts, workloadName)...)
+	}
 	out, err := lbws.NLBConfig.exposedPorts(exposedPorts, workloadName)
 	if err != nil {
 		return nil, err
