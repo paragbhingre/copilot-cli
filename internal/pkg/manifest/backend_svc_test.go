@@ -1001,6 +1001,51 @@ func TestBackendService_ExposedPorts(t *testing.T) {
 				},
 			},
 		},
+		"expose primary container port through additional_rules": {
+			mft: &BackendService{
+				Workload: Workload{
+					Name: aws.String("frontend"),
+				},
+				BackendServiceConfig: BackendServiceConfig{
+					ImageConfig: ImageWithHealthcheckAndOptionalPort{},
+					RoutingRule: RoutingRuleConfiguration{
+						PrimaryRoutingRule: AlbConfiguration{
+							TargetPort: aws.Uint16(81),
+						},
+						AdditionalRoutingRules: []AlbConfiguration{
+							{
+								Path:       stringP("additional"),
+								TargetPort: uint16P(82),
+							},
+						},
+					},
+					Sidecars: map[string]*SidecarConfig{
+						"xray": {
+							Port:       aws.String("2000"),
+							Image:      aws.String("123456789012.dkr.ecr.us-east-2.amazonaws.com/xray-daemon"),
+							CredsParam: aws.String("some arn"),
+						},
+					},
+				},
+			},
+			wantedExposedPorts: []ExposedPort{
+				{
+					Port:          81,
+					ContainerName: "frontend",
+					Protocol:      "tcp",
+				},
+				{
+					Port:          82,
+					ContainerName: "frontend",
+					Protocol:      "tcp",
+				},
+				{
+					Port:          2000,
+					ContainerName: "xray",
+					Protocol:      "tcp",
+				},
+			},
+		},
 		"expose two primary container port internally through image.port and target_port": {
 			mft: &BackendService{
 				Workload: Workload{
@@ -1122,6 +1167,108 @@ func TestBackendService_ExposedPorts(t *testing.T) {
 				},
 				{
 					Port:          81,
+					ContainerName: "xray",
+					Protocol:      "tcp",
+				},
+			},
+		},
+		"expose sidecar container ports through additional_rules": {
+			mft: &BackendService{
+				Workload: Workload{
+					Name: aws.String("frontend"),
+				},
+				BackendServiceConfig: BackendServiceConfig{
+					ImageConfig: ImageWithHealthcheckAndOptionalPort{
+						ImageWithOptionalPort: ImageWithOptionalPort{
+							Port: aws.Uint16(80),
+						},
+					},
+					RoutingRule: RoutingRuleConfiguration{
+						PrimaryRoutingRule: AlbConfiguration{
+							TargetContainer: aws.String("xray"),
+							TargetPort:      aws.Uint16(81),
+						},
+						AdditionalRoutingRules: []AlbConfiguration{
+							{
+								Path:            stringP("additional"),
+								TargetPort:      uint16P(82),
+								TargetContainer: stringP("xray"),
+							},
+						},
+					},
+					Sidecars: map[string]*SidecarConfig{
+						"xray": {
+							//Port:       aws.String("2000"),
+							Image:      aws.String("123456789012.dkr.ecr.us-east-2.amazonaws.com/xray-daemon"),
+							CredsParam: aws.String("some arn"),
+						},
+					},
+				},
+			},
+			wantedExposedPorts: []ExposedPort{
+				{
+					Port:          80,
+					ContainerName: "frontend",
+					Protocol:      "tcp",
+				},
+				{
+					Port:          81,
+					ContainerName: "xray",
+					Protocol:      "tcp",
+				},
+				{
+					Port:          82,
+					ContainerName: "xray",
+					Protocol:      "tcp",
+				},
+			},
+		},
+		"expose same sidecar container port through additional_rules": {
+			mft: &BackendService{
+				Workload: Workload{
+					Name: aws.String("frontend"),
+				},
+				BackendServiceConfig: BackendServiceConfig{
+					ImageConfig: ImageWithHealthcheckAndOptionalPort{
+						ImageWithOptionalPort: ImageWithOptionalPort{
+							Port: aws.Uint16(80),
+						},
+					},
+					RoutingRule: RoutingRuleConfiguration{
+						PrimaryRoutingRule: AlbConfiguration{
+							TargetContainer: aws.String("xray"),
+							TargetPort:      aws.Uint16(81),
+						},
+						AdditionalRoutingRules: []AlbConfiguration{
+							{
+								Path:            stringP("additional"),
+								TargetPort:      uint16P(2000),
+								TargetContainer: stringP("xray"),
+							},
+						},
+					},
+					Sidecars: map[string]*SidecarConfig{
+						"xray": {
+							Port:       aws.String("2000"),
+							Image:      aws.String("123456789012.dkr.ecr.us-east-2.amazonaws.com/xray-daemon"),
+							CredsParam: aws.String("some arn"),
+						},
+					},
+				},
+			},
+			wantedExposedPorts: []ExposedPort{
+				{
+					Port:          80,
+					ContainerName: "frontend",
+					Protocol:      "tcp",
+				},
+				{
+					Port:          81,
+					ContainerName: "xray",
+					Protocol:      "tcp",
+				},
+				{
+					Port:          2000,
 					ContainerName: "xray",
 					Protocol:      "tcp",
 				},
