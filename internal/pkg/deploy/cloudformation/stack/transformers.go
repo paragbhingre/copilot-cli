@@ -494,7 +494,7 @@ func (s *LoadBalancedWebService) convertApplicationLoadBalancer() (*template.ALB
 		httpsEnabled: s.httpsEnabled,
 	}.convert()
 	if err != nil {
-		return nil, nil
+		return nil, err
 	}
 	aliasesFor, err := convertHostedZone(albConfig.Alias, albConfig.HostedZone)
 	if err != nil {

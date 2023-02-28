@@ -158,22 +158,38 @@ const getListenerRules = async function (listenerArn) {
  */
 exports.nextAvailableRulePriorityHandler = async function (event, context) {
   let responseData = {};
+  let nextRuleNumber;
   const physicalResourceId =
     event.PhysicalResourceId || `alb-rule-priority-${event.LogicalResourceId}`;
-  let isRootPath = event.ResourceProperties.RulePath === "/";
-
   try {
     switch (event.RequestType) {
       case "Create":
       case "Update":
-        if (isRootPath) {
-          responseData.Priority = await calculateNextRootRulePriority(
-            event.ResourceProperties.ListenerArn
-          );
+        if (event.ResourceProperties.RulePath != null){
+          if (event.ResourceProperties.RulePath === "/") {
+            responseData.Priority = await calculateNextRootRulePriority(
+                event.ResourceProperties.ListenerArn
+            );
+          } else {
+            responseData.Priority = await calculateNextRulePriority(
+                event.ResourceProperties.ListenerArn
+            );
+          }
         } else {
-          responseData.Priority = await calculateNextRulePriority(
-            event.ResourceProperties.ListenerArn
-          );
+          for (let i=0; i < event.ResourceProperties.RulePaths.length; i++){
+            if (event.ResourceProperties.RulePaths[i] === "/") {
+              responseData["Priority"+i] = await calculateNextRootRulePriority(
+                  event.ResourceProperties.ListenerArn
+              );
+            } else {
+              if (nextRuleNumber == null) {
+                nextRuleNumber = await calculateNextRulePriority(
+                    event.ResourceProperties.ListenerArn
+                );
+              }
+              responseData["Priority"+i]  = nextRuleNumber++;
+            }
+          }
         }
         break;
       // Do nothing on delete, since this isn't a "real" resource.

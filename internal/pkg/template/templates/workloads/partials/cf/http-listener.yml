@@ -17,20 +17,24 @@ LoadBalancerInternalDNSAlias:
             - !GetAtt EnvControllerAction.InternalWorkloadsHostedZoneName
 {{- end}}
 
-{{- range $i, $rule := .ALB.Rules}}
-HTTPRulePriorityAction{{ if ne $i 0 }}{{ $i }}{{ end }}:
+HTTPRulePriorityAction:
   Metadata:
     'aws:copilot:description': 'A custom resource assigning priority for HTTP listener rules'
   Type: Custom::RulePriorityFunction
   Properties:
     ServiceToken: !GetAtt RulePriorityFunction.Arn
-    RulePath: {{$rule.Path}}
+    {{- if eq (len .ALB.Rules) 1 }}
+    RulePath: {{(index .ALB.Rules 0).Path}}
+    {{- else}}
+    RulePaths: {{ fmtSlice (quoteSlice .ALB.RulePaths) }}
+    {{- end}}
     {{- if eq $.WorkloadType "Backend Service"}}
     ListenerArn: !GetAtt EnvControllerAction.InternalHTTPListenerArn
     {{- else}}
     ListenerArn: !GetAtt EnvControllerAction.HTTPListenerArn
     {{- end}}
 
+{{- range $i, $rule := .ALB.Rules}}
 HTTPListenerRule{{ if ne $i 0 }}{{ $i }}{{ end }}:
   Metadata:
     'aws:copilot:description': 'A HTTP listener rule for forwarding HTTP traffic'
@@ -72,5 +76,9 @@ HTTPListenerRule{{ if ne $i 0 }}{{ $i }}{{ end }}:
     {{- else}}
     ListenerArn: !GetAtt EnvControllerAction.HTTPListenerArn
     {{- end}}
-    Priority: !GetAtt HTTPRulePriorityAction{{ if ne $i 0 }}{{ $i }}{{ end }}.Priority
+    {{- if eq (len $.ALB.Rules) 1 }}
+    Priority: !GetAtt HTTPRulePriorityAction.Priority
+    {{- else }}
+    Priority: !GetAtt HTTPRulePriorityAction.Priority{{ $i }}
+    {{- end }}
 {{- end }}

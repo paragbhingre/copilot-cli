@@ -306,6 +306,16 @@ func (cfg *ALBListener) Aliases() []string {
 	return uniqueAliases
 }
 
+// RulePaths return all the specified paths across all the routing rules in ALB.
+// Currently, we only have primary routing rule, but we will be getting additional routing rule soon.
+func (cfg *ALBListener) RulePaths() []string {
+	var rulePaths []string
+	for _, listener := range cfg.Rules {
+		rulePaths = append(rulePaths, listener.Path)
+	}
+	return rulePaths
+}
+
 func uniqueEntriesFromList(aliases []string, seen map[string]bool) []string {
 	var list []string
 	for _, entry := range aliases {
