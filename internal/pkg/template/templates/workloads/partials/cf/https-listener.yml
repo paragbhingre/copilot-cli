@@ -50,11 +50,7 @@ HTTPSRulePriorityAction:
   Type: Custom::RulePriorityFunction
   Properties:
     ServiceToken: !GetAtt RulePriorityFunction.Arn
-    {{- if eq (len .ALB.Rules) 1 }}
-    RulePath: {{(index .ALB.Rules 0).Path}}
-    {{- else }}
-    RulePaths: {{ fmtSlice (quoteSlice .ALB.RulePaths) }}
-    {{- end }}
+    RulePath: {{ fmtSlice (quoteSlice .ALB.RulePaths) }}
     {{- if eq $.WorkloadType "Backend Service" }}
     ListenerArn: !GetAtt EnvControllerAction.InternalHTTPSListenerArn
     {{- else}}
@@ -67,11 +63,7 @@ HTTPRuleWithDomainPriorityAction:
   Type: Custom::RulePriorityFunction
   Properties:
     ServiceToken: !GetAtt RulePriorityFunction.Arn
-    {{- if eq (len .ALB.Rules) 1 }}
-    RulePath: {{(index .ALB.Rules 0).Path}}
-    {{- else }}
-    RulePaths: {{ fmtSlice (quoteSlice .ALB.RulePaths) }}
-    {{- end }}
+    RulePath: {{ fmtSlice (quoteSlice .ALB.RulePaths) }}
     {{- if eq $.WorkloadType "Backend Service"}}
     ListenerArn: !GetAtt EnvControllerAction.InternalHTTPListenerArn
     {{- else}}

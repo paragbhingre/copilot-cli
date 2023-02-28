@@ -158,15 +158,15 @@ const getListenerRules = async function (listenerArn) {
  */
 exports.nextAvailableRulePriorityHandler = async function (event, context) {
   let responseData = {};
-  let nextRuleNumber;
+  let nextRootRuleNumber, nextNonRootRuleNumber;
   const physicalResourceId =
     event.PhysicalResourceId || `alb-rule-priority-${event.LogicalResourceId}`;
   try {
     switch (event.RequestType) {
       case "Create":
       case "Update":
-        if (event.ResourceProperties.RulePath != null){
-          if (event.ResourceProperties.RulePath === "/") {
+        if (event.ResourceProperties.RulePath.length == 1){
+          if (event.ResourceProperties.RulePath[0] === "/") {
             responseData.Priority = await calculateNextRootRulePriority(
                 event.ResourceProperties.ListenerArn
             );
@@ -176,18 +176,21 @@ exports.nextAvailableRulePriorityHandler = async function (event, context) {
             );
           }
         } else {
-          for (let i=0; i < event.ResourceProperties.RulePaths.length; i++){
-            if (event.ResourceProperties.RulePaths[i] === "/") {
-              responseData["Priority"+i] = await calculateNextRootRulePriority(
-                  event.ResourceProperties.ListenerArn
-              );
-            } else {
-              if (nextRuleNumber == null) {
-                nextRuleNumber = await calculateNextRulePriority(
+          for (let i=0; i < event.ResourceProperties.RulePath.length; i++){
+            if (event.ResourceProperties.RulePath[i] === "/") {
+              if (nextRootRuleNumber == null){
+                nextRootRuleNumber = await calculateNextRootRulePriority(
                     event.ResourceProperties.ListenerArn
                 );
               }
-              responseData["Priority"+i]  = nextRuleNumber++;
+              responseData["Priority"+i]  = nextRootRuleNumber--;
+            } else {
+              if (nextNonRootRuleNumber == null) {
+                nextNonRootRuleNumber = await calculateNextRulePriority(
+                    event.ResourceProperties.ListenerArn
+                );
+              }
+              responseData["Priority"+i]  = nextNonRootRuleNumber++;
             }
           }
         }
