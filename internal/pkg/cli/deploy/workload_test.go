@@ -733,8 +733,30 @@ func TestWorkloadDeployer_DeployWorkload(t *testing.T) {
 				m.mockEndpointGetter.EXPECT().ServiceDiscoveryEndpoint().Return("mockApp.local", nil)
 				m.mockEnvVersionGetter.EXPECT().Version().Return("v1.42.0", nil)
 			},
-			wantErr: fmt.Errorf("cannot deploy service mockWkld without http.alias to environment mockEnv with certificate imported"),
+			wantErr: fmt.Errorf("validate ALB runtime configuration for http: cannot deploy service mockWkld without http.alias to environment mockEnv with certificate imported"),
 		},
+		/*"fail if alias is not specified with env has imported certs for additional routing rule": {
+			inEnvironment: &config.Environment{
+				Name:   mockEnvName,
+				Region: "us-west-2",
+			},
+			inEnvironmentConfig: func() *manifest.Environment {
+				envConfig := &manifest.Environment{}
+				envConfig.HTTPConfig.Public.Certificates = mockCertARNs
+				return envConfig
+			},
+			inApp: &config.Application{
+				Name: mockAppName,
+			},
+			inAliases: manifest.Alias{
+				StringSliceOrString: manifest.StringSliceOrString{String: aws.String("alias.com")},
+			},
+			mock: func(m *deployMocks) {
+				m.mockEndpointGetter.EXPECT().ServiceDiscoveryEndpoint().Return("mockApp.local", nil)
+				m.mockEnvVersionGetter.EXPECT().Version().Return("v1.42.0", nil)
+			},
+			wantErr: fmt.Errorf("validate ALB runtime configuration for http: cannot deploy service mockWkld without http.alias to environment mockEnv with certificate imported"),
+		},*/
 		"fail if http redirect to https configured without custom domain": {
 			inRedirectToHTTPS: aws.Bool(true),
 			inEnvironment: &config.Environment{
@@ -747,11 +769,23 @@ func TestWorkloadDeployer_DeployWorkload(t *testing.T) {
 			inApp: &config.Application{
 				Name: mockAppName,
 			},
+			inAliases: manifest.Alias{
+				AdvancedAliases: []manifest.AdvancedAlias{
+					{
+						Alias:      aws.String("example.com"),
+						HostedZone: aws.String("mockHostedZone1"),
+					},
+					{
+						Alias:      aws.String("foobar.com"),
+						HostedZone: aws.String("mockHostedZone2"),
+					},
+				},
+			},
 			mock: func(m *deployMocks) {
 				m.mockEndpointGetter.EXPECT().ServiceDiscoveryEndpoint().Return("mockApp.local", nil)
 				m.mockEnvVersionGetter.EXPECT().Version().Return("v1.42.0", nil)
 			},
-			wantErr: fmt.Errorf(`cannot configure http to https redirect without having a domain associated with the app "mockApp" or importing any certificates in env "mockEnv"`),
+			wantErr: fmt.Errorf(`validate ALB runtime configuration for http: cannot configure http to https redirect without having a domain associated with the app "mockApp" or importing any certificates in env "mockEnv"`),
 		},
 		"cannot specify alias hosted zone when no certificates are imported in the env": {
 			inEnvironment: &config.Environment{
@@ -781,7 +815,7 @@ func TestWorkloadDeployer_DeployWorkload(t *testing.T) {
 				m.mockEndpointGetter.EXPECT().ServiceDiscoveryEndpoint().Return("mockApp.local", nil)
 				m.mockEnvVersionGetter.EXPECT().Version().Return("v1.42.0", nil)
 			},
-			wantErr: fmt.Errorf("cannot specify alias hosted zones [mockHostedZone1 mockHostedZone2] when no certificates are imported in environment \"mockEnv\""),
+			wantErr: fmt.Errorf("validate ALB runtime configuration for http: cannot specify alias hosted zones [mockHostedZone1 mockHostedZone2] when no certificates are imported in environment \"mockEnv\""),
 		},
 		"cannot specify alias hosted zone when cdn is enabled": {
 			inEnvironment: &config.Environment{
@@ -813,7 +847,7 @@ func TestWorkloadDeployer_DeployWorkload(t *testing.T) {
 				m.mockEndpointGetter.EXPECT().ServiceDiscoveryEndpoint().Return("mockApp.local", nil)
 				m.mockEnvVersionGetter.EXPECT().Version().Return("v1.42.0", nil)
 			},
-			wantErr: fmt.Errorf("cannot specify alias hosted zones when cdn is enabled in environment \"mockEnv\""),
+			wantErr: fmt.Errorf("validate ALB runtime configuration for http: cannot specify alias hosted zones when cdn is enabled in environment \"mockEnv\""),
 		},
 		"fail to validate certificate aliases": {
 			inEnvironment: &config.Environment{
@@ -836,7 +870,7 @@ func TestWorkloadDeployer_DeployWorkload(t *testing.T) {
 				m.mockEnvVersionGetter.EXPECT().Version().Return("v1.42.0", nil)
 				m.mockValidator.EXPECT().ValidateCertAliases([]string{"example.com", "foobar.com"}, mockCertARNs).Return(mockError)
 			},
-			wantErr: fmt.Errorf("validate aliases against the imported public ALB certificate for env mockEnv: some error"),
+			wantErr: fmt.Errorf("validate ALB runtime configuration for http: validate aliases against the imported public ALB certificate for env mockEnv: some error"),
 		},
 		"fail to validate cdn certificate aliases": {
 			inEnvironment: &config.Environment{
@@ -861,7 +895,7 @@ func TestWorkloadDeployer_DeployWorkload(t *testing.T) {
 				m.mockValidator.EXPECT().ValidateCertAliases([]string{"example.com", "foobar.com"}, mockCertARNs).Return(nil)
 				m.mockValidator.EXPECT().ValidateCertAliases([]string{"example.com", "foobar.com"}, []string{mockCDNCertARN}).Return(mockError)
 			},
-			wantErr: fmt.Errorf("validate aliases against the imported CDN certificate for env mockEnv: some error"),
+			wantErr: fmt.Errorf("validate ALB runtime configuration for http: validate aliases against the imported CDN certificate for env mockEnv: some error"),
 		},
 		"fail to get public CIDR blocks": {
 			inNLB: manifest.NetworkLoadBalancerConfiguration{
@@ -894,7 +928,7 @@ func TestWorkloadDeployer_DeployWorkload(t *testing.T) {
 				m.mockEndpointGetter.EXPECT().ServiceDiscoveryEndpoint().Return("mockApp.local", nil)
 				m.mockEnvVersionGetter.EXPECT().Version().Return("v1.42.0", nil)
 			},
-			wantErr: errors.New("cannot specify http.alias when application is not associated with a domain and env mockEnv doesn't import one or more certificates"),
+			wantErr: errors.New("validate ALB runtime configuration for http: cannot specify http.alias when application is not associated with a domain and env mockEnv doesn't import one or more certificates"),
 		},
 		"nlb alias used while app is not associated with a domain": {
 			inNLB: manifest.NetworkLoadBalancerConfiguration{
@@ -954,7 +988,7 @@ func TestWorkloadDeployer_DeployWorkload(t *testing.T) {
 				m.mockEndpointGetter.EXPECT().ServiceDiscoveryEndpoint().Return("mockApp.local", nil)
 				m.mockEnvVersionGetter.EXPECT().Version().Return("v1.42.0", nil)
 			},
-			wantErr: fmt.Errorf("get version for app %s: %w", mockAppName, mockError),
+			wantErr: fmt.Errorf("validate ALB runtime configuration for http: get version for app %s: %w", mockAppName, mockError),
 		},
 		"out of date app version": {
 			inAliases: manifest.Alias{AdvancedAliases: mockAlias},
@@ -971,7 +1005,7 @@ func TestWorkloadDeployer_DeployWorkload(t *testing.T) {
 				m.mockEnvVersionGetter.EXPECT().Version().Return("v1.42.0", nil)
 				m.mockAppVersionGetter.EXPECT().Version().Return("v.0.99.0", nil)
 			},
-			wantErr: fmt.Errorf("alias is not compatible with application versions below v1.0.0"),
+			wantErr: fmt.Errorf("validate ALB runtime configuration for http: alias is not compatible with application versions below v1.0.0"),
 		},
 		"fail to enable https alias because of incompatible app version": {
 			inAliases: manifest.Alias{AdvancedAliases: mockAlias},
@@ -988,7 +1022,7 @@ func TestWorkloadDeployer_DeployWorkload(t *testing.T) {
 				m.mockEndpointGetter.EXPECT().ServiceDiscoveryEndpoint().Return("mockApp.local", nil)
 				m.mockEnvVersionGetter.EXPECT().Version().Return("v1.42.0", nil)
 			},
-			wantErr: fmt.Errorf("alias is not compatible with application versions below %s", deploy.AliasLeastAppTemplateVersion),
+			wantErr: fmt.Errorf("validate ALB runtime configuration for http: alias is not compatible with application versions below %s", deploy.AliasLeastAppTemplateVersion),
 		},
 		"fail to enable nlb alias because of incompatible app version": {
 			inNLB: manifest.NetworkLoadBalancerConfiguration{
@@ -1027,7 +1061,7 @@ func TestWorkloadDeployer_DeployWorkload(t *testing.T) {
 				m.mockEndpointGetter.EXPECT().ServiceDiscoveryEndpoint().Return("mockApp.local", nil)
 				m.mockEnvVersionGetter.EXPECT().Version().Return("v1.42.0", nil)
 			},
-			wantErr: fmt.Errorf(`alias "v1.v2.mockDomain" is not supported in hosted zones managed by Copilot`),
+			wantErr: fmt.Errorf(`validate ALB runtime configuration for http: alias "v1.v2.mockDomain" is not supported in hosted zones managed by Copilot`),
 		},
 		"fail to enable nlb alias because of invalid alias": {
 			inNLB: manifest.NetworkLoadBalancerConfiguration{
@@ -1368,9 +1402,11 @@ func TestWorkloadDeployer_DeployWorkload(t *testing.T) {
 						},
 						RoutingRule: manifest.RoutingRuleConfigOrBool{
 							RoutingRuleConfiguration: manifest.RoutingRuleConfiguration{
-								Path:            aws.String("/"),
-								Alias:           tc.inAliases,
-								RedirectToHTTPS: tc.inRedirectToHTTPS,
+								MainRoutingRule: manifest.ALBRoutingRule{
+									Path:            aws.String("/"),
+									Alias:           tc.inAliases,
+									RedirectToHTTPS: tc.inRedirectToHTTPS,
+								},
 							},
 						},
 						NLBConfig: tc.inNLB,

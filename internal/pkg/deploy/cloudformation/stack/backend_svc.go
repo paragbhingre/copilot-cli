@@ -68,7 +68,7 @@ func NewBackendService(conf BackendServiceConfig) (*BackendService, error) {
 		},
 		manifest:   conf.Manifest,
 		parser:     fs,
-		albEnabled: !conf.Manifest.RoutingRule.IsEmpty(),
+		albEnabled: !conf.Manifest.RoutingRule.MainRoutingRule.IsEmpty(),
 	}
 
 	if len(conf.EnvManifest.HTTPConfig.Private.Certificates) != 0 {
@@ -128,8 +128,8 @@ func (s *BackendService) Template() (string, error) {
 		return "", err
 	}
 	var deregistrationDelay *int64 = aws.Int64(60)
-	if s.manifest.RoutingRule.DeregistrationDelay != nil {
-		deregistrationDelay = aws.Int64(int64(s.manifest.RoutingRule.DeregistrationDelay.Seconds()))
+	if s.manifest.RoutingRule.MainRoutingRule.DeregistrationDelay != nil {
+		deregistrationDelay = aws.Int64(int64(s.manifest.RoutingRule.MainRoutingRule.DeregistrationDelay.Seconds()))
 	}
 	var scConfig *template.ServiceConnect
 	if s.manifest.Network.Connect.Enabled() {
@@ -187,7 +187,7 @@ func (s *BackendService) Template() (string, error) {
 			Port: targetContainerPort,
 			Name: targetContainer,
 		},
-		HTTPHealthCheck: convertHTTPHealthCheck(&s.manifest.RoutingRule.HealthCheck),
+		HTTPHealthCheck: convertHTTPHealthCheck(&s.manifest.RoutingRule.MainRoutingRule.HealthCheck),
 		ALBListener:     albListenerConfig,
 
 		// Custom Resource Config.
@@ -240,11 +240,11 @@ func (s *BackendService) Parameters() ([]*cloudformation.Parameter, error) {
 		},
 	}...)
 
-	if !s.manifest.RoutingRule.IsEmpty() {
+	if !s.manifest.RoutingRule.MainRoutingRule.IsEmpty() {
 		params = append(params, []*cloudformation.Parameter{
 			{
 				ParameterKey:   aws.String(WorkloadRulePathParamKey),
-				ParameterValue: s.manifest.RoutingRule.Path,
+				ParameterValue: s.manifest.RoutingRule.MainRoutingRule.Path,
 			},
 			{
 				ParameterKey:   aws.String(WorkloadHTTPSParamKey),

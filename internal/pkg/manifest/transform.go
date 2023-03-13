@@ -523,7 +523,7 @@ func (t routingRuleConfigOrBoolTransformer) Transformer(typ reflect.Type) func(d
 	return func(dst, src reflect.Value) error {
 		dstStruct, srcStruct := dst.Interface().(RoutingRuleConfigOrBool), src.Interface().(RoutingRuleConfigOrBool)
 
-		if !srcStruct.RoutingRuleConfiguration.IsEmpty() {
+		if !srcStruct.RoutingRuleConfiguration.MainRoutingRule.IsEmpty() {
 			dstStruct.Enabled = nil
 		}
 

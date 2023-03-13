@@ -91,7 +91,7 @@ func (s *BackendService) MarshalBinary() ([]byte, error) {
 
 func (s *BackendService) requiredEnvironmentFeatures() []string {
 	var features []string
-	if !s.RoutingRule.IsEmpty() {
+	if !s.RoutingRule.MainRoutingRule.IsEmpty() {
 		features = append(features, template.InternalALBFeatureName)
 	}
 	features = append(features, s.Network.requiredEnvFeatures()...)
@@ -208,7 +208,11 @@ func (b *BackendService) ExposedPorts() (ExposedPortsIndex, error) {
 		}
 		exposedPorts = append(exposedPorts, out...)
 	}
-	exposedPorts = append(exposedPorts, b.RoutingRule.exposedPorts(exposedPorts, workloadName)...)
+	albRoutingRules := b.RoutingRule.ALBRoutingRules()
+	for _, rule := range albRoutingRules {
+		out := rule.exposedPorts(exposedPorts, workloadName)
+		exposedPorts = append(exposedPorts, out...)
+	}
 	portsForContainer, containerForPort := prepareParsedExposedPortsMap(sortExposedPorts(exposedPorts))
 	return ExposedPortsIndex{
 		PortsForContainer: portsForContainer,
