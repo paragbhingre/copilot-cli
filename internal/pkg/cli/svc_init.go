@@ -124,7 +124,7 @@ type initWkldVars struct {
 type initSvcVars struct {
 	initWkldVars
 
-	port        uint16
+	port        []string
 	ingressType string
 }
 
@@ -240,9 +240,11 @@ func (o *initSvcOpts) Validate() error {
 			return err
 		}
 	}
-	if o.port != 0 {
-		if err := validateSvcPort(o.port); err != nil {
-			return err
+	if len(o.port) > 0 {
+		for _, port := range o.port {
+			if err := validateSvcPort(port); err != nil {
+				return err
+			}
 		}
 	}
 	if o.image != "" && o.wkldType == manifestinfo.RequestDrivenWebServiceType {
@@ -333,6 +335,14 @@ func (o *initSvcOpts) Execute() error {
 	if err != nil {
 		return err
 	}
+	portList := make([]uint16, len(o.port))
+	for idx, port := range o.port {
+		parsedPort, err := strconv.Atoi(port)
+		if err != nil {
+			return err
+		}
+		portList[idx] = uint16(parsedPort)
+	}
 	manifestPath, err := o.init.Service(&initialize.ServiceProps{
 		WorkloadProps: initialize.WorkloadProps{
 			App:            o.appName,
@@ -346,7 +356,7 @@ func (o *initSvcOpts) Execute() error {
 			Topics:                  o.topics,
 			PrivateOnlyEnvironments: envs,
 		},
-		Port:        o.port,
+		Ports:       portList,
 		HealthCheck: hc,
 		Private:     strings.EqualFold(o.ingressType, ingressTypeEnvironment),
 	})
@@ -573,7 +583,7 @@ func (o *initSvcOpts) askDockerfile() error {
 
 func (o *initSvcOpts) askSvcPort() (err error) {
 	// If the port flag was set, use that and don't ask.
-	if o.port != 0 {
+	if len(o.port) > 0 {
 		return nil
 	}
 
@@ -593,7 +603,7 @@ func (o *initSvcOpts) askSvcPort() (err error) {
 		case 0:
 			// There were no ports detected, keep the default port prompt.
 		case 1:
-			o.port = ports[0].Port
+			o.port[0] = strconv.Itoa(int(ports[0].Port))
 			return nil
 		default:
 			defaultPort = strconv.Itoa(int(ports[0].Port))
@@ -604,7 +614,7 @@ func (o *initSvcOpts) askSvcPort() (err error) {
 		return nil
 	}
 
-	port, err := o.prompt.Get(
+	selectedPorts, err := o.prompt.Get(
 		fmt.Sprintf(svcInitSvcPortPrompt, color.Emphasize("port")),
 		svcInitSvcPortHelpPrompt,
 		validateSvcPort,
@@ -615,13 +625,18 @@ func (o *initSvcOpts) askSvcPort() (err error) {
 		return fmt.Errorf("get port: %w", err)
 	}
 
-	portUint, err := strconv.ParseUint(port, 10, 16)
-	if err != nil {
-		return fmt.Errorf("parse port string: %w", err)
+	fmt.Println("printing selected ports ", selectedPorts, " size ", len(selectedPorts))
+
+	portList := strings.Split(selectedPorts, " ")
+
+	fmt.Println("printing selected ports split", portList[0])
+	o.port = make([]string, len(portList))
+	for idx, port := range portList {
+		o.port[idx] = port
 	}
-
-	o.port = uint16(portUint)
-
+	for idx, port := range o.port {
+		fmt.Println("printing ", idx, " port  ", port)
+	}
 	return nil
 }
 
@@ -800,7 +815,7 @@ This command is also run as part of "copilot init".`,
 	cmd.Flags().StringVarP(&vars.wkldType, svcTypeFlag, typeFlagShort, "", svcTypeFlagDescription)
 	cmd.Flags().StringVarP(&vars.dockerfilePath, dockerFileFlag, dockerFileFlagShort, "", dockerFileFlagDescription)
 	cmd.Flags().StringVarP(&vars.image, imageFlag, imageFlagShort, "", imageFlagDescription)
-	cmd.Flags().Uint16Var(&vars.port, svcPortFlag, 0, svcPortFlagDescription)
+	cmd.Flags().StringArrayVar(&vars.port, svcPortFlag, []string{}, svcPortFlagDescription)
 	cmd.Flags().StringArrayVar(&vars.subscriptions, subscribeTopicsFlag, []string{}, subscribeTopicsFlagDescription)
 	cmd.Flags().BoolVar(&vars.noSubscribe, noSubscriptionFlag, false, noSubscriptionFlagDescription)
 	cmd.Flags().StringVar(&vars.ingressType, ingressTypeFlag, "", ingressTypeFlagDescription)

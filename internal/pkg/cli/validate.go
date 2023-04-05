@@ -545,21 +545,31 @@ func apprunnerImageValidation(val interface{}) error {
 }
 
 func basicPortValidation(val interface{}) error {
-
 	var err error
-
 	switch val := val.(type) {
 	case []byte:
+		fmt.Println("i was here 1")
 		err = bytePortValidation(val)
 	case string:
+		fmt.Println("i was here 2")
 		err = stringPortValidation(val)
+	/*case []string:
+	fmt.Println("i was here 3")
+	for _, port := range val {
+		if err = stringPortValidation(port); err != nil {
+			break
+		}
+	}*/
 	case uint16:
+		fmt.Println("i was here 6")
 		if val == 0 {
 			err = errPortInvalid
 		}
 	default:
+		fmt.Println("i was here 4")
 		err = errPortInvalid
 	}
+	fmt.Println("i was here 5")
 	return err
 }
 
@@ -573,12 +583,15 @@ func bytePortValidation(val []byte) error {
 }
 
 func stringPortValidation(val string) error {
-	port64, err := strconv.ParseUint(val, 10, 64)
-	if err != nil {
-		return errPortInvalid
-	}
-	if port64 < 1 || port64 > 65535 {
-		return errPortInvalid
+	portList := strings.Split(val, " ")
+	for _, port := range portList {
+		port64, err := strconv.ParseUint(port, 10, 64)
+		if err != nil {
+			return errPortInvalid
+		}
+		if port64 < 1 || port64 > 65535 {
+			return errPortInvalid
+		}
 	}
 	return nil
 }

@@ -285,8 +285,8 @@ func newInitOpts(vars initVars) (*initOpts, error) {
 			case manifestinfo.IsTypeAService(t):
 				svcVars := initSvcVars{
 					initWkldVars: wkldVars,
-					port:         vars.port,
-					ingressType:  ingressTypeInternet,
+					//port:         vars.port,
+					ingressType: ingressTypeInternet,
 				}
 				opts := initSvcOpts{
 					initSvcVars: svcVars,
@@ -318,7 +318,7 @@ func newInitOpts(vars initVars) (*initOpts, error) {
 					return envDescriber, nil
 				}
 				o.initWlCmd = &opts
-				o.port = &opts.port // Surfaced via pointer for logging.
+				//o.port = &opts.port // Surfaced via pointer for logging.
 				o.initWkldVars = &opts.initWkldVars
 			default:
 				return fmt.Errorf("unrecognized workload type")

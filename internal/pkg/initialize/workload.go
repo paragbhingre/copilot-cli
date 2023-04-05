@@ -84,7 +84,7 @@ type JobProps struct {
 // ServiceProps contains the information needed to represent a Service (port, HealthCheck, and workload common props).
 type ServiceProps struct {
 	WorkloadProps
-	Port        uint16
+	Ports       []uint16
 	HealthCheck manifest.ContainerHealthCheck
 	Private     bool
 	appDomain   *string
@@ -226,8 +226,8 @@ func (w *WorkloadInitializer) initService(props *ServiceProps) (string, error) {
 	log.Successf(manifestMsgFmt, svcWlType, color.HighlightUserInput(props.Name), color.HighlightResource(path))
 
 	helpText := "Your manifest contains configurations like your container size and port."
-	if props.Port != 0 {
-		helpText = fmt.Sprintf("Your manifest contains configurations like your container size and port (:%d).", props.Port)
+	if len(props.Ports) > 0 {
+		helpText = fmt.Sprintf("Your manifest contains configurations like your container size and port (:%d).", props.Ports[0])
 	}
 	log.Infoln(color.Help(helpText))
 	log.Infoln()
@@ -309,9 +309,9 @@ func (w *WorkloadInitializer) newServiceManifest(i *ServiceProps) (encoding.Bina
 
 func (w *WorkloadInitializer) newLoadBalancedWebServiceManifest(inProps *ServiceProps) (*manifest.LoadBalancedWebService, error) {
 	var httpVersion string
-	if inProps.Port == commonGRPCPort {
+	if inProps.Ports[0] == commonGRPCPort {
 		log.Infof("Detected port %s, setting HTTP protocol version to %s in the manifest.\n",
-			color.HighlightUserInput(strconv.Itoa(int(inProps.Port))), color.HighlightCode(manifest.GRPCProtocol))
+			color.HighlightUserInput(strconv.Itoa(int(inProps.Ports[0]))), color.HighlightCode(manifest.GRPCProtocol))
 		httpVersion = manifest.GRPCProtocol
 	}
 	outProps := &manifest.LoadBalancedWebServiceProps{
@@ -322,7 +322,7 @@ func (w *WorkloadInitializer) newLoadBalancedWebServiceManifest(inProps *Service
 			PrivateOnlyEnvironments: inProps.PrivateOnlyEnvironments,
 		},
 		Path:        "/",
-		Port:        inProps.Port,
+		Ports:       inProps.Ports,
 		HTTPVersion: httpVersion,
 		HealthCheck: inProps.HealthCheck,
 		Platform:    inProps.Platform,
@@ -351,7 +351,7 @@ func (w *WorkloadInitializer) newRequestDrivenWebServiceManifest(i *ServiceProps
 			Dockerfile: i.DockerfilePath,
 			Image:      i.Image,
 		},
-		Port:     i.Port,
+		Port:     i.Ports[0],
 		Platform: i.Platform,
 		Private:  i.Private,
 	}
@@ -366,7 +366,7 @@ func newBackendServiceManifest(i *ServiceProps) (*manifest.BackendService, error
 			Image:                   i.Image,
 			PrivateOnlyEnvironments: i.PrivateOnlyEnvironments,
 		},
-		Port:        i.Port,
+		Ports:       i.Ports,
 		HealthCheck: i.HealthCheck,
 		Platform:    i.Platform,
 	}), nil

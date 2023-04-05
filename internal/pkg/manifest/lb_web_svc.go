@@ -4,6 +4,7 @@
 package manifest
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
@@ -20,6 +21,7 @@ const (
 // Default values for HTTPHealthCheck for a load balanced web service.
 const (
 	DefaultHealthCheckPath        = "/"
+	DefaultHealthCheckAdminPath   = "/admin"
 	DefaultHealthCheckGracePeriod = 60
 )
 
@@ -62,8 +64,8 @@ type LoadBalancedWebServiceConfig struct {
 // LoadBalancedWebServiceProps contains properties for creating a new load balanced fargate service manifest.
 type LoadBalancedWebServiceProps struct {
 	*WorkloadProps
-	Path string
-	Port uint16
+	Path  string
+	Ports []uint16
 
 	HTTPVersion string               // Optional http protocol version such as gRPC, HTTP2.
 	HealthCheck ContainerHealthCheck // Optional healthcheck configuration.
@@ -78,7 +80,7 @@ func NewLoadBalancedWebService(props *LoadBalancedWebServiceProps) *LoadBalanced
 	svc.Name = stringP(props.Name)
 	svc.LoadBalancedWebServiceConfig.ImageConfig.Image.Location = stringP(props.Image)
 	svc.LoadBalancedWebServiceConfig.ImageConfig.Image.Build.BuildArgs.Dockerfile = stringP(props.Dockerfile)
-	svc.LoadBalancedWebServiceConfig.ImageConfig.Port = aws.Uint16(props.Port)
+	svc.LoadBalancedWebServiceConfig.ImageConfig.Port = aws.Uint16(props.Ports[0])
 	svc.LoadBalancedWebServiceConfig.ImageConfig.HealthCheck = props.HealthCheck
 	svc.LoadBalancedWebServiceConfig.Platform = props.Platform
 	if isWindowsPlatform(props.Platform) {
@@ -89,6 +91,23 @@ func NewLoadBalancedWebService(props *LoadBalancedWebServiceProps) *LoadBalanced
 		svc.HTTPOrBool.Main.ProtocolVersion = &props.HTTPVersion
 	}
 	svc.HTTPOrBool.Main.Path = aws.String(props.Path)
+	fmt.Println("printing length of ports ", len(props.Ports))
+	if len(props.Ports) > 1 {
+		fmt.Println("inside len if ")
+		svc.LoadBalancedWebServiceConfig.HTTPOrBool.AdditionalRoutingRules = make([]RoutingRule, len(props.Ports)-1)
+		for idx, port := range props.Ports {
+			fmt.Println("inside for ")
+			if idx != 0 {
+				fmt.Println("inside for if")
+				svc.LoadBalancedWebServiceConfig.HTTPOrBool.AdditionalRoutingRules[idx-1].TargetPort = aws.Uint16(port)
+				svc.LoadBalancedWebServiceConfig.HTTPOrBool.AdditionalRoutingRules[idx-1].Path = aws.String("/admin")
+				svc.LoadBalancedWebServiceConfig.HTTPOrBool.AdditionalRoutingRules[idx-1].HealthCheck = HealthCheckArgsOrString{
+					Union: BasicToUnion[string, HTTPHealthCheckArgs](DefaultHealthCheckAdminPath),
+				}
+			}
+		}
+	}
+
 	svc.parser = template.New()
 	for _, envName := range props.PrivateOnlyEnvironments {
 		svc.Environments[envName] = &LoadBalancedWebServiceConfig{
