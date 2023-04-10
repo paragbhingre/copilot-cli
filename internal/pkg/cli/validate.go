@@ -548,18 +548,11 @@ func basicPortValidation(val interface{}) error {
 	var err error
 	switch val := val.(type) {
 	case []byte:
-		fmt.Println("i was here 1")
+		//fmt.Println("i was here 1")
 		err = bytePortValidation(val)
 	case string:
-		fmt.Println("i was here 2")
+		//fmt.Println("i was here 2")
 		err = stringPortValidation(val)
-	/*case []string:
-	fmt.Println("i was here 3")
-	for _, port := range val {
-		if err = stringPortValidation(port); err != nil {
-			break
-		}
-	}*/
 	case uint16:
 		fmt.Println("i was here 6")
 		if val == 0 {

@@ -4,7 +4,9 @@
 package manifest
 
 import (
-	"fmt"
+	"github.com/aws/copilot-cli/internal/pkg/term/color"
+	"github.com/aws/copilot-cli/internal/pkg/term/log"
+	"strconv"
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
@@ -21,12 +23,13 @@ const (
 // Default values for HTTPHealthCheck for a load balanced web service.
 const (
 	DefaultHealthCheckPath        = "/"
-	DefaultHealthCheckAdminPath   = "/admin"
+	DefaultHealthCheckAdminPath   = "admin"
 	DefaultHealthCheckGracePeriod = 60
 )
 
 const (
-	GRPCProtocol = "gRPC" // GRPCProtocol is the HTTP protocol version for gRPC.
+	GRPCProtocol   = "gRPC" // GRPCProtocol is the HTTP protocol version for gRPC.
+	commonGRPCPort = uint16(50051)
 )
 
 // durationp is a utility function used to convert a time.Duration to a pointer. Useful for YAML unmarshaling
@@ -67,7 +70,7 @@ type LoadBalancedWebServiceProps struct {
 	Path  string
 	Ports []uint16
 
-	HTTPVersion string               // Optional http protocol version such as gRPC, HTTP2.
+	//HTTPVersion string               // Optional http protocol version such as gRPC, HTTP2.
 	HealthCheck ContainerHealthCheck // Optional healthcheck configuration.
 	Platform    PlatformArgsOrString // Optional platform configuration.
 }
@@ -80,30 +83,43 @@ func NewLoadBalancedWebService(props *LoadBalancedWebServiceProps) *LoadBalanced
 	svc.Name = stringP(props.Name)
 	svc.LoadBalancedWebServiceConfig.ImageConfig.Image.Location = stringP(props.Image)
 	svc.LoadBalancedWebServiceConfig.ImageConfig.Image.Build.BuildArgs.Dockerfile = stringP(props.Dockerfile)
-	svc.LoadBalancedWebServiceConfig.ImageConfig.Port = aws.Uint16(props.Ports[0])
+	svc.LoadBalancedWebServiceConfig.ImageConfig.Port = aws.Uint16(0)
+	if len(props.Ports) > 0 {
+		svc.LoadBalancedWebServiceConfig.ImageConfig.Port = aws.Uint16(props.Ports[0])
+		if props.Ports[0] == commonGRPCPort {
+			log.Infof("Detected port %s, setting HTTP protocol version to %s in the manifest.\n",
+				color.HighlightUserInput(strconv.Itoa(int(props.Ports[0]))), color.HighlightCode(GRPCProtocol))
+			svc.HTTPOrBool.Main.ProtocolVersion = aws.String(GRPCProtocol)
+		}
+	}
 	svc.LoadBalancedWebServiceConfig.ImageConfig.HealthCheck = props.HealthCheck
 	svc.LoadBalancedWebServiceConfig.Platform = props.Platform
 	if isWindowsPlatform(props.Platform) {
 		svc.LoadBalancedWebServiceConfig.TaskConfig.CPU = aws.Int(MinWindowsTaskCPU)
 		svc.LoadBalancedWebServiceConfig.TaskConfig.Memory = aws.Int(MinWindowsTaskMemory)
 	}
-	if props.HTTPVersion != "" {
-		svc.HTTPOrBool.Main.ProtocolVersion = &props.HTTPVersion
-	}
 	svc.HTTPOrBool.Main.Path = aws.String(props.Path)
-	fmt.Println("printing length of ports ", len(props.Ports))
+	//fmt.Println("printing length of ports ", len(props.Ports))
 	if len(props.Ports) > 1 {
-		fmt.Println("inside len if ")
+		//fmt.Println("inside len if ")
 		svc.LoadBalancedWebServiceConfig.HTTPOrBool.AdditionalRoutingRules = make([]RoutingRule, len(props.Ports)-1)
+		assumedPath := DefaultHealthCheckAdminPath
+
 		for idx, port := range props.Ports {
-			fmt.Println("inside for ")
+
+			//fmt.Println("inside for ")
 			if idx != 0 {
-				fmt.Println("inside for if")
-				svc.LoadBalancedWebServiceConfig.HTTPOrBool.AdditionalRoutingRules[idx-1].TargetPort = aws.Uint16(port)
-				svc.LoadBalancedWebServiceConfig.HTTPOrBool.AdditionalRoutingRules[idx-1].Path = aws.String("/admin")
-				svc.LoadBalancedWebServiceConfig.HTTPOrBool.AdditionalRoutingRules[idx-1].HealthCheck = HealthCheckArgsOrString{
-					Union: BasicToUnion[string, HTTPHealthCheckArgs](DefaultHealthCheckAdminPath),
+				if props.Ports[idx] == commonGRPCPort {
+					log.Infof("Detected port %s, setting HTTP protocol version to %s in the manifest.\n",
+						color.HighlightUserInput(strconv.Itoa(int(props.Ports[0]))), color.HighlightCode(GRPCProtocol))
+					svc.HTTPOrBool.AdditionalRoutingRules[idx-1].ProtocolVersion = aws.String(GRPCProtocol)
 				}
+				svc.LoadBalancedWebServiceConfig.HTTPOrBool.AdditionalRoutingRules[idx-1].TargetPort = aws.Uint16(port)
+				svc.LoadBalancedWebServiceConfig.HTTPOrBool.AdditionalRoutingRules[idx-1].Path = aws.String(assumedPath)
+				svc.LoadBalancedWebServiceConfig.HTTPOrBool.AdditionalRoutingRules[idx-1].HealthCheck = HealthCheckArgsOrString{
+					Union: BasicToUnion[string, HTTPHealthCheckArgs]("/" + assumedPath),
+				}
+				assumedPath = "super" + assumedPath
 			}
 		}
 	}

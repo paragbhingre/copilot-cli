@@ -603,6 +603,7 @@ func (o *initSvcOpts) askSvcPort() (err error) {
 		case 0:
 			// There were no ports detected, keep the default port prompt.
 		case 1:
+			o.port = make([]string, 1)
 			o.port[0] = strconv.Itoa(int(ports[0].Port))
 			return nil
 		default:
@@ -615,7 +616,7 @@ func (o *initSvcOpts) askSvcPort() (err error) {
 	}
 
 	selectedPorts, err := o.prompt.Get(
-		fmt.Sprintf(svcInitSvcPortPrompt, color.Emphasize("port")),
+		fmt.Sprintf(svcInitSvcPortPrompt, color.Emphasize("port(s)")),
 		svcInitSvcPortHelpPrompt,
 		validateSvcPort,
 		prompt.WithDefaultInput(defaultPort),
@@ -625,17 +626,11 @@ func (o *initSvcOpts) askSvcPort() (err error) {
 		return fmt.Errorf("get port: %w", err)
 	}
 
-	fmt.Println("printing selected ports ", selectedPorts, " size ", len(selectedPorts))
-
 	portList := strings.Split(selectedPorts, " ")
 
-	fmt.Println("printing selected ports split", portList[0])
 	o.port = make([]string, len(portList))
 	for idx, port := range portList {
 		o.port[idx] = port
-	}
-	for idx, port := range o.port {
-		fmt.Println("printing ", idx, " port  ", port)
 	}
 	return nil
 }

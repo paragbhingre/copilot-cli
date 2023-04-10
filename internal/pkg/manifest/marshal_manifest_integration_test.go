@@ -110,7 +110,7 @@ func TestBackendSvc_InitialManifestIntegration(t *testing.T) {
 					Timeout:     durationp(20 * time.Second),
 					StartPeriod: durationp(15 * time.Second),
 				},
-				Port: 8080,
+				Ports: []uint16{8080},
 			},
 			wantedTestdata: "backend-svc-customhealthcheck.yml",
 		},

@@ -20,7 +20,7 @@ http:
   # You can specify additional rules to route customer traffic to different container ports.
   additional_rules:
     {{- range $i, $rule := .HTTPOrBool.AdditionalRoutingRules }}
-    - path: '{{$rule.Path}}'    #
+    - path: '{{$rule.Path}}'
       target_port: {{$rule.TargetPort}}
       # healthcheck: '{{$rule.HealthCheck.Basic}}'
     {{- end }}

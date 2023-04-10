@@ -7,10 +7,6 @@ package initialize
 import (
 	"encoding"
 	"fmt"
-	"os"
-	"path/filepath"
-	"strconv"
-
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/copilot-cli/internal/pkg/config"
 	"github.com/aws/copilot-cli/internal/pkg/manifest"
@@ -18,15 +14,13 @@ import (
 	"github.com/aws/copilot-cli/internal/pkg/term/color"
 	"github.com/aws/copilot-cli/internal/pkg/term/log"
 	"github.com/aws/copilot-cli/internal/pkg/workspace"
+	"os"
+	"path/filepath"
 )
 
 const (
 	jobWlType = "job"
 	svcWlType = "service"
-)
-
-const (
-	commonGRPCPort = uint16(50051)
 )
 
 var fmtErrUnrecognizedWlType = "unrecognized workload type %s"
@@ -308,12 +302,7 @@ func (w *WorkloadInitializer) newServiceManifest(i *ServiceProps) (encoding.Bina
 }
 
 func (w *WorkloadInitializer) newLoadBalancedWebServiceManifest(inProps *ServiceProps) (*manifest.LoadBalancedWebService, error) {
-	var httpVersion string
-	if inProps.Ports[0] == commonGRPCPort {
-		log.Infof("Detected port %s, setting HTTP protocol version to %s in the manifest.\n",
-			color.HighlightUserInput(strconv.Itoa(int(inProps.Ports[0]))), color.HighlightCode(manifest.GRPCProtocol))
-		httpVersion = manifest.GRPCProtocol
-	}
+
 	outProps := &manifest.LoadBalancedWebServiceProps{
 		WorkloadProps: &manifest.WorkloadProps{
 			Name:                    inProps.Name,
@@ -323,7 +312,6 @@ func (w *WorkloadInitializer) newLoadBalancedWebServiceManifest(inProps *Service
 		},
 		Path:        "/",
 		Ports:       inProps.Ports,
-		HTTPVersion: httpVersion,
 		HealthCheck: inProps.HealthCheck,
 		Platform:    inProps.Platform,
 	}
