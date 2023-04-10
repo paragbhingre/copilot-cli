@@ -59,7 +59,7 @@ type initVars struct {
 	imageTag       string
 
 	// Service specific flags
-	port uint16
+	port []string
 
 	// Scheduled Job specific flags
 	schedule string
@@ -285,8 +285,8 @@ func newInitOpts(vars initVars) (*initOpts, error) {
 			case manifestinfo.IsTypeAService(t):
 				svcVars := initSvcVars{
 					initWkldVars: wkldVars,
-					//port:         vars.port,
-					ingressType: ingressTypeInternet,
+					port:         vars.port,
+					ingressType:  ingressTypeInternet,
 				}
 				opts := initSvcOpts{
 					initSvcVars: svcVars,
@@ -560,7 +560,7 @@ func BuildInitCmd() *cobra.Command {
 	cmd.Flags().StringVarP(&vars.image, imageFlag, imageFlagShort, "", imageFlagDescription)
 	cmd.Flags().BoolVar(&vars.shouldDeploy, deployFlag, false, deployTestFlagDescription)
 	cmd.Flags().StringVar(&vars.imageTag, imageTagFlag, "", imageTagFlagDescription)
-	cmd.Flags().Uint16Var(&vars.port, svcPortFlag, 0, svcPortFlagDescription)
+	cmd.Flags().StringArrayVar(&vars.port, svcPortFlag, []string{}, svcPortFlagDescription)
 	cmd.Flags().StringVar(&vars.schedule, scheduleFlag, "", scheduleFlagDescription)
 	cmd.Flags().StringVar(&vars.timeout, timeoutFlag, "", timeoutFlagDescription)
 	cmd.Flags().IntVar(&vars.retries, retriesFlag, 0, retriesFlagDescription)
