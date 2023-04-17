@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 
 	awscfn "github.com/aws/copilot-cli/internal/pkg/aws/cloudformation"
 	"github.com/aws/copilot-cli/internal/pkg/aws/iam"
@@ -85,7 +86,7 @@ type initOpts struct {
 	// Since the sub-commands implement the actionCommand interface, without pointers to their internal fields
 	// we have to resort to type-casting the interface. These pointers simplify data access.
 	appName      *string
-	port         *uint16
+	port         *[]string
 	schedule     *string
 	initWkldVars *initWkldVars
 
@@ -318,7 +319,7 @@ func newInitOpts(vars initVars) (*initOpts, error) {
 					return envDescriber, nil
 				}
 				o.initWlCmd = &opts
-				//o.port = &opts.port // Surfaced via pointer for logging.
+				o.port = &opts.port // Surfaced via pointer for logging.
 				o.initWkldVars = &opts.initWkldVars
 			default:
 				return fmt.Errorf("unrecognized workload type")
@@ -372,8 +373,8 @@ func (o *initOpts) logWorkloadTypeAck() {
 			color.HighlightUserInput(o.initWkldVars.wkldType), color.HighlightUserInput(o.initWkldVars.name), color.HighlightUserInput(o.initWkldVars.appName), color.HighlightUserInput(*o.schedule))
 		return
 	}
-	if aws.Uint16Value(o.port) != 0 {
-		log.Infof("Ok great, we'll set up a %s named %s in application %s listening on port %s.\n", color.HighlightUserInput(o.initWkldVars.wkldType), color.HighlightUserInput(o.initWkldVars.name), color.HighlightUserInput(o.initWkldVars.appName), color.HighlightUserInput(fmt.Sprintf("%d", *o.port)))
+	if len(*o.port) > 0 {
+		log.Infof("Ok great, we'll set up a %s named %s in application %s listening on port(s) %s.\n", color.HighlightUserInput(o.initWkldVars.wkldType), color.HighlightUserInput(o.initWkldVars.name), color.HighlightUserInput(o.initWkldVars.appName), color.HighlightUserInput(fmt.Sprintf("%s", strings.Join(*o.port, " "))))
 	} else {
 		log.Infof("Ok great, we'll set up a %s named %s in application %s.\n", color.HighlightUserInput(o.initWkldVars.wkldType), color.HighlightUserInput(o.initWkldVars.name), color.HighlightUserInput(o.initWkldVars.appName))
 	}

@@ -147,6 +147,35 @@ func TestSvcInitOpts_Validate(t *testing.T) {
 				afero.WriteFile(mockFS, "hello/Dockerfile", []byte("FROM nginx"), 0644)
 			},
 		},
+		"valid lbws port flag": {
+			inSvcName:        "frontend",
+			inSvcType:        "Load Balanced Web Service",
+			inDockerfilePath: "./hello/Dockerfile",
+			inSvcPort:        []string{"3000", "4000"},
+
+			setupMocks: func(m initSvcMocks) {
+				m.mockStore.EXPECT().GetApplication("phonetool").Return(&config.Application{}, nil)
+			},
+			mockFileSystem: func(mockFS afero.Fs) {
+				mockFS.MkdirAll("hello", 0755)
+				afero.WriteFile(mockFS, "hello/Dockerfile", []byte("FROM nginx"), 0644)
+			},
+		},
+		"invalid backend service port flag": {
+			inSvcName:        "frontend",
+			inSvcType:        "Backend Service",
+			inDockerfilePath: "./hello/Dockerfile",
+			inSvcPort:        []string{"badport", "4000"},
+
+			setupMocks: func(m initSvcMocks) {
+				m.mockStore.EXPECT().GetApplication("phonetool").Return(&config.Application{}, nil)
+			},
+			mockFileSystem: func(mockFS afero.Fs) {
+				mockFS.MkdirAll("hello", 0755)
+				afero.WriteFile(mockFS, "hello/Dockerfile", []byte("FROM nginx"), 0644)
+			},
+			wantedErr: errors.New(`port badport is invalid: value must be in range 1-65535`),
+		},
 	}
 
 	for name, tc := range testCases {

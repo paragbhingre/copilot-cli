@@ -19,7 +19,7 @@ import (
 
 func TestInitOpts_Run(t *testing.T) {
 	mockSchedule := "@hourly"
-	var mockPort uint16 = 80
+	mockPort := []string{"80"}
 	var mockAppName = "demo"
 	testCases := map[string]struct {
 		inShouldDeploy          bool

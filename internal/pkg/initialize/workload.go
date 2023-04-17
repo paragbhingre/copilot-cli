@@ -16,6 +16,7 @@ import (
 	"github.com/aws/copilot-cli/internal/pkg/workspace"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 const (
@@ -221,7 +222,7 @@ func (w *WorkloadInitializer) initService(props *ServiceProps) (string, error) {
 
 	helpText := "Your manifest contains configurations like your container size and port."
 	if len(props.Ports) > 0 {
-		helpText = fmt.Sprintf("Your manifest contains configurations like your container size and port (:%d).", props.Ports[0])
+		helpText = fmt.Sprintf("Your manifest contains configurations like your container size and port(s) (:%s).", strings.Trim(strings.Replace(fmt.Sprint(props.Ports), " ", " ", -1), "[]"))
 	}
 	log.Infoln(color.Help(helpText))
 	log.Infoln()
