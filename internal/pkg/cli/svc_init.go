@@ -81,7 +81,7 @@ Deployed resources (such as your ECR repository, logs) will contain this %[1]s's
 	svcInitSvcPortPrompt     = "Which %s do you want customer traffic sent to?"
 	svcInitSvcPortHelpPrompt = `The port(s) will be used by the load balancer to route incoming traffic to this service.
 You should set this to the port(s) which your Dockerfile uses to communicate with the internet.
-You can also specify multiple container ports in a similar pattern to Dockerfile (ports separated by a space), i.e., 3000 3001`
+You can also specify multiple container ports in Load Balanced Web Service in a similar pattern to Dockerfile (ports separated by a space), i.e., 3000 3001`
 
 	svcInitPublisherPrompt     = "Which topics do you want to subscribe to?"
 	svcInitPublisherHelpPrompt = `A publisher is an existing SNS Topic to which a service publishes messages. 
@@ -616,6 +616,25 @@ func (o *initSvcOpts) askSvcPort() (err error) {
 		return nil
 	}
 
+	if o.wkldType == manifestinfo.RequestDrivenWebServiceType {
+		selectedPorts, err := o.prompt.Get(
+			fmt.Sprintf(svcInitSvcPortPrompt, color.Emphasize("port")),
+			svcInitSvcPortHelpPrompt,
+			validateSvcPort,
+			prompt.WithDefaultInput(defaultPort),
+			prompt.WithFinalMessage("Port:"),
+		)
+		if err != nil {
+			return fmt.Errorf("get port: %w", err)
+		}
+		if len(strings.Split(selectedPorts, " ")) > 1 {
+			return fmt.Errorf("App Runner Service doesn't expose multiple ports")
+		}
+		o.port = make([]string, 1)
+		o.port[0] = selectedPorts
+		return nil
+	}
+
 	selectedPorts, err := o.prompt.Get(
 		fmt.Sprintf(svcInitSvcPortPrompt, color.Emphasize("port(s)")),
 		svcInitSvcPortHelpPrompt,
@@ -626,9 +645,7 @@ func (o *initSvcOpts) askSvcPort() (err error) {
 	if err != nil {
 		return fmt.Errorf("get port: %w", err)
 	}
-
-	portList := strings.Split(selectedPorts, " ")
-
+	portList := strings.Split(selectedPorts, " ") // make a list out of customer given input of space separated multiple ports
 	o.port = make([]string, len(portList))
 	for idx, port := range portList {
 		o.port[idx] = port
